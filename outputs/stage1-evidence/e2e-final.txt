@@ -1,0 +1,20 @@
+
+> agent-workbench@0.1.0 test:e2e
+> playwright test
+
+
+Running 3 tests using 1 worker
+
+node.exe : (node:14308) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+At line:1 char:1
++ & "D:\nodejs/node.exe" "D:\nodejs/node_modules/npm/bin/npm-cli.js" ru ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:14308) Wa... env being set.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\e2e\conversation.e2e.ts:217:1 › packaged renderer is isolated and its named bridge rejects malformed requests without journal writes (1.0s)
+  ok 2 tests\e2e\conversation.e2e.ts:257:1 › streams a full conversation and restores exact transcript and timestamped event order after orderly restart (3.1s)
+  ok 3 tests\e2e\conversation.e2e.ts:319:1 › persists provider failure, accepts the next prompt, and keeps duplicate request IDs idempotent across restart (3.1s)
+
+  3 passed (8.8s)

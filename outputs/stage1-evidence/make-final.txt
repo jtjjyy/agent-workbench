@@ -1,0 +1,65 @@
+
+> agent-workbench@0.1.0 make
+> electron-forge make
+
+> Checking your system
+> Checking package manager version
+√ Found npm@11.12.1
+√ Checking your system
+> Loading configuration
+√ Loading configuration
+> Resolving make targets
+› Making for the following targets: ,
+√ Resolving make targets
+> Running package command
+> Preparing to package application
+√ Preparing to package application
+> Running packaging hooks
+> Running generateAssets hook
+√ Running generateAssets hook
+> Running prePackage hook
+> [plugin-webpack] Preparing webpack bundles
+> Preparing native dependencies for x64
+√ Preparing native dependencies
+> Building webpack bundles
+√ Building webpack bundles
+√ [plugin-webpack] Preparing webpack bundles
+√ Running prePackage hook
+√ Running packaging hooks
+> Packaging application
+› Determining targets...
+> Packaging for x64 on win32
+> Copying files
+√ Copying files
+> Preparing native dependencies
+√ Preparing native dependencies
+> Finalizing package
+√ Finalizing package
+√ Packaging for x64 on win32
+√ Packaging application
+> Running postPackage hook
+√ Running postPackage hook
+√ Running package command
+> Running preMake hook
+√ Running preMake hook
+> Making distributables
+> Making a squirrel distributable for win32/x64
+> Making a zip distributable for win32/x64
+node.exe : (node:26048) [DEP0147] DeprecationWarning: In future versions of Node.js, fs.rmdir(path, { recursive: true }
+) will be removed. Use fs.rm(path, { recursive: true }) instead
+At line:1 char:1
++ & "D:\nodejs/node.exe" "D:\nodejs/node_modules/npm/bin/npm-cli.js" ru ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:26048) [D...true }) instead:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+(Use `node --trace-deprecation ...` to show where the warning was created)
+√ Making a zip distributable for win32/x64
+√ Making a squirrel distributable for win32/x64
+√ Making distributables
+> Running postMake hook
+› Artifacts available at: D:\CODEX\Worktree\agent-workbench-stage1\arduino-agent-agent-agent-https-ai\out\make
+√ Running postMake hook
+> Saving make results
+› Make results saved to: D:\CODEX\Worktree\agent-workbench-stage1\arduino-agent-agent-agent-https-ai\out\make-results
+√ Saving make results

@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "url": "file:///D:/CODEX/Worktree/agent-workbench-stage1/arduino-agent-agent-agent-https-ai/work/verification/path%20%23%20percent%2520-6PjoEl/Agent%20Workbench/resources/app.asar/.webpack/renderer/main_window/index.html",
+  "runtime": {
+    "packaged": true,
+    "executable": "D:\\CODEX\\Worktree\\agent-workbench-stage1\\arduino-agent-agent-agent-https-ai\\work\\verification\\path # percent%20-6PjoEl\\Agent Workbench\\Agent Workbench.exe"
+  },
+  "eventCount": 13
+}
+Orderly exit: 0. Isolated package and profile preserved under work/verification.
