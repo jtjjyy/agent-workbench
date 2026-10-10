@@ -19,10 +19,40 @@ function isIncompleteObject(text: string, error: unknown): boolean {
   }
   const message = error.message;
   const position = /at position (\d+)/.exec(message);
-  // Only EOF parser errors are recoverable; malformed tokens remain corruption.
-  return message.includes('Unexpected end of JSON input')
+  const atEnd = message.includes('Unexpected end of JSON input')
     || message.includes('Unterminated string in JSON')
-    || (position !== null && Number(position[1]) >= text.trimEnd().length);
+    || (position !== null && Number(position[1]) >= text.length);
+  if (!atEnd) {
+    return false;
+  }
+
+  // EOF diagnostics can hide invalid bytes inside an unfinished string.
+  let inString = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (!inString) {
+      inString = character === '"';
+    } else if (character === '"') {
+      inString = false;
+    } else if (text.charCodeAt(index) < 0x20) {
+      return false;
+    } else if (character === '\\') {
+      const escape = text[++index];
+      if (escape === undefined) {
+        break;
+      }
+      if (escape === 'u') {
+        for (let digit = 0; digit < 4 && index + 1 < text.length; digit += 1) {
+          if (!/[0-9a-fA-F]/.test(text[++index])) {
+            return false;
+          }
+        }
+      } else if (!/^["\\/bfnrt]$/.test(escape)) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 export class JsonlEventStore implements EventStore {

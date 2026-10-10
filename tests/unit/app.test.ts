@@ -3,8 +3,10 @@ import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement, StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CONVERSATION_ID, type AgentBridge, type EventEnvelope, type SubmitMessageRequest } from '../../src/shared/contracts';
+import { DEFAULT_CONVERSATION_ID, type AgentBridge, type EventEnvelope, type EventStore, type SubmitMessageRequest } from '../../src/shared/contracts';
 import { App } from '../../src/renderer/components/App';
+import { RunCoordinator } from '../../src/main/agent/run-coordinator';
+import { createDeterministicProvider } from '../../src/main/agent/provider';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -206,6 +208,57 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
     await waitFor(() => expect(input).toHaveValue(''));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    'message.user.created', 'run.started', 'message.agent.created',
+    'message.agent.delta', 'run.completed',
+  ] as const)('shows restart-required unavailability when the journal fails at %s', async (failedType) => {
+    const written: EventEnvelope[] = [...history];
+    let deltaCount = 0;
+    const store: EventStore = {
+      async readAll() { return [...written]; },
+      async append(event) {
+        if (event.type === failedType
+          && (failedType !== 'message.agent.delta' || ++deltaCount === 2)) {
+          throw new Error('C:\\private\\API_KEY=secret');
+        }
+        written.push(event);
+      },
+    };
+    const coordinator = new RunCoordinator(store, createDeterministicProvider({ chunkDelayMs: 0 }));
+    await coordinator.initialize();
+    const bridge: AgentBridge = {
+      readConversation: (id) => coordinator.readConversation(id),
+      submitMessage: (request) => coordinator.submit(request),
+      onEvent: (listener) => coordinator.subscribe(listener),
+    };
+    vi.stubGlobal('agent', bridge);
+    render(createElement(App));
+    await ready();
+    const input = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(input, { target: { value: 'Keep this draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Unavailable'));
+    expect(screen.getByRole('alert')).toHaveTextContent(/restart Agent Workbench/i);
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/private|API_KEY|secret/);
+    expect(screen.queryByText('Streaming')).not.toBeInTheDocument();
+    expect(screen.queryByText('Running')).not.toBeInTheDocument();
+    expect(screen.getByText('First reply')).toBeInTheDocument();
+    expect(input).toHaveValue('Keep this draft');
+    expect(input).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Reload conversation' })).not.toBeInTheDocument();
+    if (failedType === 'message.agent.delta') {
+      expect(screen.getByText('Local mock r')).toBeInTheDocument();
+    }
+    const trace = within(screen.getByRole('region', { name: 'Event trace' }));
+    expect(trace.getAllByRole('listitem')).toHaveLength(written.length);
+    expect(written.slice(history.length).some((event) => event.type === 'run.failed')).toBe(false);
+    const count = written.length;
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(written).toHaveLength(count);
+    await coordinator.shutdown();
   });
 
   it('fails closed on history errors and reloads without duplicate subscriptions', async () => {

@@ -11,6 +11,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [runtimeUnavailable, setRuntimeUnavailable] = useState(false);
   const [pending, setPending] = useState(false);
   const [reload, setReload] = useState(0);
   const pendingRequest = useRef<SubmitMessageRequest | null>(null);
@@ -75,10 +76,12 @@ export function App() {
     }
   }, [state.messages]);
 
-  const disabled = !bridge || loading || !!historyError || state.reloadRequired
+  const disabled = runtimeUnavailable || !bridge || loading || !!historyError || state.reloadRequired
     || !!state.activeRunId || pending;
-  const error = historyError || submitError || state.error;
-  const status = !bridge ? 'Offline' : loading ? 'Loading'
+  const error = runtimeUnavailable
+    ? 'Local storage is unavailable. Restart Agent Workbench before continuing.'
+    : historyError || submitError || state.error;
+  const status = runtimeUnavailable ? 'Unavailable' : !bridge ? 'Offline' : loading ? 'Loading'
     : historyError ? 'Unavailable' : state.reloadRequired ? 'Reload required'
       : state.activeRunId ? 'Running' : pending ? 'Sending' : 'Ready';
 
@@ -93,8 +96,11 @@ export function App() {
     setPending(true);
     setSubmitError(null);
     try {
-      await bridge.submitMessage(request);
-      if (mounted.current) setText('');
+      const result = await bridge.submitMessage(request);
+      if (mounted.current) {
+        if (result?.status === 'unavailable') setRuntimeUnavailable(true);
+        else setText('');
+      }
     } catch {
       if (mounted.current) setSubmitError('Could not send message.');
     } finally {
@@ -127,7 +133,9 @@ export function App() {
                     ? <User size={15} aria-hidden="true" />
                     : <Bot size={15} aria-hidden="true" />}
                   <span>{message.role === 'user' ? 'You' : 'Agent'}</span>
-                  {message.status === 'streaming' && <span className="message-status">Streaming</span>}
+                  {message.status === 'streaming' && (
+                    <span className="message-status">{runtimeUnavailable ? 'Stopped' : 'Streaming'}</span>
+                  )}
                   {message.status === 'failed' && <span className="message-failed">Failed</span>}
                 </header>
                 <p className="message-text">{message.text}</p>
@@ -138,7 +146,7 @@ export function App() {
             <div className="error-row">
               <CircleAlert size={16} aria-hidden="true" />
               <p role="alert">{error}</p>
-              {bridge && (historyError || state.reloadRequired) && (
+              {!runtimeUnavailable && bridge && (historyError || state.reloadRequired) && (
                 <button className="icon-button" type="button" aria-label="Reload conversation"
                   title="Reload conversation" disabled={pending || loading}
                   onClick={() => { setSubmitError(null); setReload((value) => value + 1); }}>

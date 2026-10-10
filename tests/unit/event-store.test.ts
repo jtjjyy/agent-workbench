@@ -21,6 +21,17 @@ function event(sequence: number, conversationId = 'conv-1'): EventEnvelope<'mess
   };
 }
 
+const malformedStringTails = [
+  { name: 'space in a partial Unicode escape', tail: '{"payload":{"text":"\\u12 ' },
+  { name: 'tab in a partial Unicode escape', tail: '{"payload":{"text":"\\u12\t' },
+  { name: 'nonhex digit in a partial Unicode escape', tail: '{"payload":{"text":"\\u12g' },
+  { name: 'raw tab in an unterminated string', tail: '{"payload":{"text":"bad\t' },
+  { name: 'raw carriage return in an unterminated string', tail: '{"payload":{"text":"bad\r' },
+  { name: 'raw NUL in an unterminated string', tail: '{"payload":{"text":"bad\u0000' },
+  { name: 'invalid escape in an unterminated string', tail: '{"payload":{"text":"bad\\x' },
+  { name: 'escaped raw tab in an unterminated string', tail: '{"payload":{"text":"bad\\\t' },
+];
+
 describe('JsonlEventStore', () => {
   let directory: string;
   let filePath: string;
@@ -129,6 +140,50 @@ describe('JsonlEventStore', () => {
     expect(await new JsonlEventStore(filePath).readAll('conv-1'))
       .toEqual([event(1), event(2)]);
   });
+
+  it.each(malformedStringTails)('rejects replay of $name without altering bytes', async ({ tail }) => {
+    const original = Buffer.from(`${JSON.stringify(event(1))}\n${tail}`);
+    await writeFile(filePath, original);
+    await expect(store.readAll('conv-1')).rejects.toThrow(/line 2.*malformed JSON/i);
+    expect(await readFile(filePath)).toEqual(original);
+  });
+
+  it.each(malformedStringTails)('rejects append after $name without truncating bytes', async ({ tail }) => {
+    const original = Buffer.from(`${JSON.stringify(event(1))}\n${tail}`);
+    await writeFile(filePath, original);
+    await expect(store.append(event(2))).rejects.toThrow(/line 2.*malformed JSON/i);
+    expect(await readFile(filePath)).toEqual(original);
+  });
+
+  it.each(malformedStringTails)('rejects $name in completed and middle records', async ({ tail }) => {
+    for (const suffix of ['\n', `\n${JSON.stringify(event(2))}\n{"payload":`]) {
+      const original = Buffer.from(`${JSON.stringify(event(1))}\n${tail}${suffix}`);
+      await writeFile(filePath, original);
+      await expect(store.readAll('conv-1')).rejects.toThrow(/line 2.*malformed JSON/i);
+      await expect(store.append(event(3))).rejects.toThrow(/line 2.*malformed JSON/i);
+      expect(await readFile(filePath)).toEqual(original);
+    }
+  });
+
+  it('recovers every byte prefix of a valid final object including escaped strings', async () => {
+    const firstLine = Buffer.from(`${JSON.stringify(event(1))}\n`);
+    const second = {
+      ...event(2),
+      payload: { ...event(2).payload, text: 'quote" slash\\ \b\f\n\r\t\u0000 \u4f60\u597d' },
+      metadata: [-1.25e-7, true, false, null, {}],
+    };
+    const record = Buffer.from(JSON.stringify(second));
+    for (let length = 1; length < record.length; length += 1) {
+      const original = Buffer.concat([firstLine, record.subarray(0, length)]);
+      await writeFile(filePath, original);
+      expect(await store.readAll('conv-1'), `prefix length ${length}`).toEqual([event(1)]);
+      expect(await readFile(filePath)).toEqual(original);
+      await store.append(event(2));
+      expect(await readFile(filePath, 'utf8')).toBe(
+        `${JSON.stringify(event(1))}\n${JSON.stringify(event(2))}\n`,
+      );
+    }
+  }, 30_000);
 
   it('recovers a partial first record before appending a new first event', async () => {
     await writeFile(filePath, '{"schemaVersion":');

@@ -54,9 +54,15 @@ export interface AgentProvider {
   ): Promise<void>;
 }
 
+// Transient command outcome, never a journal event. Success remains void.
+export type SubmitMessageResult = void | {
+  status: 'unavailable';
+  code: 'JOURNAL_WRITE_FAILED';
+};
+
 export interface AgentBridge {
   readConversation(conversationId: string): Promise<EventEnvelope[]>;
-  submitMessage(request: SubmitMessageRequest): Promise<void>;
+  submitMessage(request: SubmitMessageRequest): Promise<SubmitMessageResult>;
   onEvent(listener: (event: EventEnvelope) => void): () => void;
 }
 
