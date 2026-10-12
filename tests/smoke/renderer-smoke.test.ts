@@ -7,5 +7,5 @@ import { App } from '../../src/renderer/components/App';
 afterEach(cleanup);
 test('renders the desktop application heading', () => {
   render(createElement(App));
-  expect(screen.getByRole('heading', { name: 'Agent Workbench' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: '开发者智能体工作台' })).toBeTruthy();
 });

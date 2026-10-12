@@ -1,4 +1,5 @@
-import { DEFAULT_CONVERSATION_ID, type EventEnvelope } from '../../shared/contracts';
+import { DEFAULT_CONVERSATION_ID, type EventEnvelope, type EventPayloads } from '../../shared/contracts';
+import { runErrorText } from '../../shared/zh-CN';
 
 export interface ConversationMessage {
   messageId: string;
@@ -6,7 +7,11 @@ export interface ConversationMessage {
   text: string;
   runId?: string;
   clientRequestId?: string;
-  status: 'complete' | 'streaming' | 'failed';
+  status: 'complete' | 'streaming' | 'failed' | 'cancelled';
+  usage?: EventPayloads['run.completed']['usage'];
+  provider?: EventPayloads['run.completed']['provider'];
+  model?: string;
+  stopReason?: EventPayloads['run.completed']['stopReason'];
 }
 
 export interface ConversationState {
@@ -14,6 +19,8 @@ export interface ConversationState {
   messages: ConversationMessage[];
   events: EventEnvelope[];
   activeRunId: string | null;
+  runProvider?: EventPayloads['run.started']['provider'];
+  runModel?: string;
   lastSequence: number;
   error: string | null;
   reloadRequired: boolean;
@@ -44,6 +51,8 @@ export function conversationReducer(
 
   let messages = state.messages;
   let activeRunId = state.activeRunId;
+  let runProvider = state.runProvider;
+  let runModel = state.runModel;
   let error = state.error;
 
   switch (event.type) {
@@ -62,6 +71,8 @@ export function conversationReducer(
     }
     case 'run.started':
       activeRunId = event.payload.runId;
+      runProvider = event.payload.provider;
+      runModel = event.payload.model;
       error = null;
       break;
     case 'message.agent.created': {
@@ -70,6 +81,7 @@ export function conversationReducer(
       if (!messages.some((message) => message.messageId === payload.messageId)) {
         messages = [...messages, {
           ...payload, role: 'agent', text: '', status: 'streaming',
+          provider: runProvider, model: runModel,
         }];
       }
       break;
@@ -85,6 +97,16 @@ export function conversationReducer(
         : message);
       break;
     }
+    case 'tool.started':
+    case 'tool.completed':
+    case 'approval.requested':
+    case 'approval.decided':
+    case 'command.approval.requested':
+    case 'command.approval.decided':
+    case 'file.edit.started':
+    case 'file.edit.completed':
+      if (activeRunId !== event.payload.runId) return requireReload(state);
+      break;
     case 'run.completed':
       if (activeRunId === event.payload.runId) {
         const payload = event.payload;
@@ -93,18 +115,26 @@ export function conversationReducer(
           && message.runId === payload.runId);
         if (!target) return requireReload(state);
         activeRunId = null;
+        runProvider = payload.provider ?? runProvider;
+        runModel = payload.model ?? runModel;
         messages = messages.map((message) => message === target
-          ? { ...message, status: 'complete' }
+          ? {
+            ...message, status: 'complete',
+            usage: payload.usage ? { ...payload.usage } : undefined,
+            provider: payload.provider ?? message.provider,
+            model: payload.model ?? message.model,
+            stopReason: payload.stopReason,
+          }
           : message);
       }
       break;
     case 'run.failed':
       if (activeRunId === event.payload.runId) {
         activeRunId = null;
-        error = 'Run failed.';
+        error = event.payload.code === 'RUN_CANCELLED' ? null : runErrorText(event.payload.code);
         messages = messages.map((message) =>
           message.role === 'agent' && message.runId === event.payload.runId
-            ? { ...message, status: 'failed' }
+            ? { ...message, status: event.payload.code === 'RUN_CANCELLED' ? 'cancelled' : 'failed' }
             : message);
       }
       break;
@@ -116,6 +146,8 @@ export function conversationReducer(
     ...state,
     messages,
     activeRunId,
+    runProvider,
+    runModel,
     error,
     lastSequence: event.sequence,
     events: [...state.events, { ...event, payload: { ...event.payload } } as EventEnvelope],
@@ -125,7 +157,7 @@ export function conversationReducer(
 function requireReload(state: ConversationState): ConversationState {
   return {
     ...state,
-    error: 'Conversation is out of sync. Reload required.',
+    error: '会话状态不同步，请重新加载。',
     reloadRequired: true,
   };
 }

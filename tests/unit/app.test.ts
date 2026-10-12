@@ -4,6 +4,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { createElement, StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONVERSATION_ID, type AgentBridge, type EventEnvelope, type EventStore, type SubmitMessageRequest } from '../../src/shared/contracts';
+import { DEFAULT_MODEL_SETTINGS } from '../../src/shared/model-settings';
+import { EMPTY_WORKSPACE } from '../../src/shared/workspace';
+import { EVENT_LABELS, RUN_ERROR_MESSAGES } from '../../src/shared/zh-CN';
 import { App } from '../../src/renderer/components/App';
 import { RunCoordinator } from '../../src/main/agent/run-coordinator';
 import { createDeterministicProvider } from '../../src/main/agent/provider';
@@ -57,12 +60,32 @@ const history: EventEnvelope[] = [
   },
 ];
 
+// Keep historical fixtures structurally compatible with the expanded desktop bridge.
+function modelBridgeFixture(): Pick<AgentBridge,
+  'readModelSettings' | 'saveModelSettings' | 'deleteModelApiKey' | 'cancelRun'
+  | 'readWorkspace' | 'chooseWorkspace' | 'setWorkspaceConsent' | 'clearWorkspace'
+  | 'readPendingFileEdit' | 'decideFileEdit'> {
+  return {
+    readModelSettings: async () => ({ ...DEFAULT_MODEL_SETTINGS, hasApiKey: false, secureStorageAvailable: false }),
+    saveModelSettings: async () => ({ ok: false, code: 'SETTINGS_WRITE_FAILED' }),
+    deleteModelApiKey: async () => ({ ok: false, code: 'SETTINGS_WRITE_FAILED' }),
+    cancelRun: async () => ({ cancelled: false }),
+    readWorkspace: async () => ({ ...EMPTY_WORKSPACE }),
+    chooseWorkspace: async () => ({ ok: true, workspace: { ...EMPTY_WORKSPACE } }),
+    setWorkspaceConsent: async () => ({ ok: false, code: 'WORKSPACE_UNAVAILABLE' }),
+    clearWorkspace: async () => ({ ok: true, workspace: { ...EMPTY_WORKSPACE } }),
+    readPendingFileEdit: async () => null,
+    decideFileEdit: async () => ({ ok: false, code: 'APPROVAL_UNAVAILABLE' }),
+  };
+}
+
 function bridgeFixture(initial: EventEnvelope[] = []) {
   const listeners = new Set<(event: EventEnvelope) => void>();
   const calls: string[] = [];
   const requests: SubmitMessageRequest[] = [];
   const unsubscribe = vi.fn();
   const bridge: AgentBridge = {
+    ...modelBridgeFixture(),
     readConversation: vi.fn(async (conversationId) => {
       calls.push(`read:${conversationId}`);
       return initial;
@@ -93,8 +116,8 @@ afterEach(() => {
 
 async function ready() {
   await waitFor(() => {
-    expect(screen.queryByRole('textbox', { name: 'Message' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+    expect(screen.queryByRole('textbox', { name: '消息' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '消息' })).toBeEnabled();
   });
 }
 
@@ -104,12 +127,12 @@ describe('App', () => {
     render(createElement(App));
     await ready();
     expect(fixture.calls).toEqual(['subscribe', `read:${DEFAULT_CONVERSATION_ID}`]);
-    expect(screen.getByRole('heading', { name: 'Agent Workbench' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '开发者智能体工作台' })).toBeInTheDocument();
     expect(screen.getByText('Hello')).toBeInTheDocument();
     expect(screen.getByText('First reply')).toBeInTheDocument();
-    const trace = screen.getByRole('region', { name: 'Event trace' });
+    const trace = screen.getByRole('region', { name: '事件轨迹' });
     expect(within(trace).getAllByRole('listitem')).toHaveLength(7);
-    expect(within(trace).getByText('run.completed')).toBeInTheDocument();
+    expect(within(trace).getByText(EVENT_LABELS['run.completed'])).toBeInTheDocument();
   });
 
   it('buffers startup events, sorts overlap, and deduplicates history and live deltas', async () => {
@@ -117,15 +140,15 @@ describe('App', () => {
     const read = deferred<EventEnvelope[]>();
     fixture.bridge.readConversation = vi.fn(() => read.promise);
     render(createElement(App));
-    expect(screen.queryByRole('textbox', { name: 'Message' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
+    expect(screen.queryByRole('textbox', { name: '消息' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '消息' })).toBeDisabled();
     fixture.emit(history[5]);
     fixture.emit(history[4]);
     fixture.emit(history[6]);
     await act(async () => { read.resolve([...history.slice(0, 6)].reverse()); });
     await ready();
     expect(screen.getByText('First reply')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Event trace' })).getAllByRole('listitem')).toHaveLength(7);
+    expect(within(screen.getByRole('region', { name: '事件轨迹' })).getAllByRole('listitem')).toHaveLength(7);
     fixture.emit(history[5]);
     expect(screen.getByText('First reply')).toBeInTheDocument();
   });
@@ -168,7 +191,7 @@ describe('App', () => {
     });
     render(createElement(App));
     await ready();
-    const input = screen.getByRole('textbox', { name: 'Message' });
+    const input = screen.getByRole('textbox', { name: '消息' });
     fireEvent.change(input, { target: { value: '  Explain\nthis  ' } });
     fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
     expect(fixture.requests).toHaveLength(0);
@@ -180,14 +203,14 @@ describe('App', () => {
     });
     const id = fixture.requests[0].clientRequestId;
     expect(input).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '发送消息' })).toBeDisabled();
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(fixture.requests).toHaveLength(1);
     await act(async () => { pending.resolve(); });
     await ready();
     expect(input).toHaveValue('');
     fireEvent.change(input, { target: { value: 'Next' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     await waitFor(() => expect(fixture.requests).toHaveLength(2));
     expect(fixture.requests[1].clientRequestId).not.toBe(id);
   });
@@ -198,14 +221,14 @@ describe('App', () => {
       .mockResolvedValueOnce(undefined);
     render(createElement(App));
     await ready();
-    const input = screen.getByRole('textbox', { name: 'Message' });
+    const input = screen.getByRole('textbox', { name: '消息' });
     fireEvent.change(input, { target: { value: 'Keep this draft' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/could not send/i));
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('无法发送消息。'));
     expect(screen.getByRole('alert')).not.toHaveTextContent(/private|secret/);
     expect(input).toHaveValue('Keep this draft');
     expect(input).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     await waitFor(() => expect(input).toHaveValue(''));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -229,6 +252,7 @@ describe('App', () => {
     const coordinator = new RunCoordinator(store, createDeterministicProvider({ chunkDelayMs: 0 }));
     await coordinator.initialize();
     const bridge: AgentBridge = {
+      ...modelBridgeFixture(),
       readConversation: (id) => coordinator.readConversation(id),
       submitMessage: (request) => coordinator.submit(request),
       onEvent: (listener) => coordinator.subscribe(listener),
@@ -236,23 +260,23 @@ describe('App', () => {
     vi.stubGlobal('agent', bridge);
     render(createElement(App));
     await ready();
-    const input = screen.getByRole('textbox', { name: 'Message' });
+    const input = screen.getByRole('textbox', { name: '消息' });
     fireEvent.change(input, { target: { value: 'Keep this draft' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Unavailable'));
-    expect(screen.getByRole('alert')).toHaveTextContent(/restart Agent Workbench/i);
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('不可用'));
+    expect(screen.getByRole('alert')).toHaveTextContent(RUN_ERROR_MESSAGES.JOURNAL_WRITE_FAILED);
     expect(screen.getByRole('alert')).not.toHaveTextContent(/private|API_KEY|secret/);
-    expect(screen.queryByText('Streaming')).not.toBeInTheDocument();
-    expect(screen.queryByText('Running')).not.toBeInTheDocument();
+    expect(screen.queryByText('生成中')).not.toBeInTheDocument();
+    expect(screen.queryByText('运行中')).not.toBeInTheDocument();
     expect(screen.getByText('First reply')).toBeInTheDocument();
     expect(input).toHaveValue('Keep this draft');
     expect(input).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Reload conversation' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发送消息' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '重新加载会话' })).not.toBeInTheDocument();
     if (failedType === 'message.agent.delta') {
-      expect(screen.getByText('Local mock r')).toBeInTheDocument();
+      expect(screen.getByText('本地模拟回复：Keep')).toBeInTheDocument();
     }
-    const trace = within(screen.getByRole('region', { name: 'Event trace' }));
+    const trace = within(screen.getByRole('region', { name: '事件轨迹' }));
     expect(trace.getAllByRole('listitem')).toHaveLength(written.length);
     expect(written.slice(history.length).some((event) => event.type === 'run.failed')).toBe(false);
     const count = written.length;
@@ -268,11 +292,11 @@ describe('App', () => {
     render(createElement(App));
     await waitFor(() => {
       expect(screen.queryByRole('alert')).toBeInTheDocument();
-      expect(screen.getByRole('alert')).toHaveTextContent(/could not load/i);
+      expect(screen.getByRole('alert')).toHaveTextContent('无法加载会话。');
     });
     expect(screen.getByRole('alert')).not.toHaveTextContent('secret');
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Reload conversation' }));
+    expect(screen.getByRole('textbox', { name: '消息' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '重新加载会话' }));
     await ready();
     expect(screen.getByText('First reply')).toBeInTheDocument();
     expect(fixture.listeners.size).toBe(1);
@@ -283,14 +307,14 @@ describe('App', () => {
     const fixture = bridgeFixture(history.slice(0, 6));
     render(createElement(App));
     await waitFor(() => expect(screen.queryByText('First reply')).toBeInTheDocument());
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent(/running/i);
+    expect(screen.getByRole('textbox', { name: '消息' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('运行中');
     fixture.emit({
       ...history[6], type: 'run.failed',
       payload: { runId: 'run-1', code: 'PROVIDER_ERROR', message: 'Provider failed' },
     });
     await ready();
-    expect(screen.getByRole('alert')).toHaveTextContent(/failed/i);
+    expect(screen.getByRole('alert')).toHaveTextContent('任务未完成，你可以重新发送消息。');
     expect(screen.getByText('Hello')).toBeInTheDocument();
     expect(screen.getByText('First reply')).toBeInTheDocument();
   });
@@ -300,9 +324,9 @@ describe('App', () => {
     render(createElement(App));
     await waitFor(() => expect(screen.queryByText('Hello')).toBeInTheDocument());
     fixture.emit(history[5]);
-    expect(screen.getByRole('alert')).toHaveTextContent(/reload/i);
-    expect(screen.getByRole('button', { name: 'Reload conversation' })).toBeEnabled();
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('会话状态不同步，请重新加载。');
+    expect(screen.getByRole('button', { name: '重新加载会话' })).toBeEnabled();
+    expect(screen.getByRole('textbox', { name: '消息' })).toBeDisabled();
   });
 
   it('renders trace metadata only, never raw payload, event IDs or conversation titles', async () => {
@@ -312,8 +336,8 @@ describe('App', () => {
     }]);
     render(createElement(App));
     await ready();
-    const trace = screen.getByRole('region', { name: 'Event trace' });
-    expect(trace).toHaveTextContent('conversation.created');
+    const trace = screen.getByRole('region', { name: '事件轨迹' });
+    expect(trace).toHaveTextContent(EVENT_LABELS['conversation.created']);
     expect(trace.querySelector('time')).toHaveAttribute('datetime', '2026-10-10T04:00:00.000Z');
     expect(document.body).not.toHaveTextContent(/private|API_KEY|SECRET_EVENT_ID/);
     fixture.emit({
@@ -330,25 +354,25 @@ describe('App', () => {
   it('handles a missing bridge without crashing or offering fake availability', () => {
     vi.stubGlobal('agent', undefined);
     render(createElement(App));
-    expect(screen.getByRole('heading', { name: 'Agent Workbench' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '开发者智能体工作台' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(/unavailable/i);
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('桌面连接不可用。');
+    expect(screen.getByRole('textbox', { name: '消息' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '发送消息' })).toBeDisabled();
   });
 
   it('keeps blank drafts disabled and ignores composing Enter keystrokes', async () => {
     const fixture = bridgeFixture();
     render(createElement(App));
     await ready();
-    const input = screen.getByRole('textbox', { name: 'Message' });
+    const input = screen.getByRole('textbox', { name: '消息' });
     fireEvent.change(input, { target: { value: '   ' } });
-    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '发送消息' })).toBeDisabled();
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(fixture.requests).toHaveLength(0);
     fireEvent.change(input, { target: { value: 'Draft' } });
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
     expect(fixture.requests).toHaveLength(0);
-    expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Send message');
+    expect(screen.getByRole('button', { name: '发送消息' })).toHaveAttribute('title', '发送消息');
   });
 });

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { AgentBridge, EventEnvelope, SubmitMessageRequest } from '../../src/shared/contracts';
+import { EVENT_LABELS, RUN_ERROR_MESSAGES } from '../../src/shared/zh-CN';
 
 type Desktop = {
   userData: string;
@@ -108,9 +109,9 @@ const test = base.extend<{ desktop: Desktop }>({
           const packagedPath = relative(dirname(executablePath), runtime.appPath);
           expect(isAbsolute(packagedPath) || packagedPath.startsWith('..'), 'App resources must belong to the resolved package').toBe(false);
           const page = await app.firstWindow();
-          await expect(page.getByRole('heading', { name: 'Agent Workbench', exact: true })).toBeVisible();
-          await expect(page.getByRole('status')).toHaveText('Ready');
-          await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeEnabled();
+          await expect(page.getByRole('heading', { name: '开发者智能体工作台', exact: true })).toBeVisible();
+          await expect(page.getByRole('status')).toHaveText('就绪');
+          await expect(page.getByRole('textbox', { name: '消息', exact: true })).toBeEnabled();
           return { app, page };
         },
       });
@@ -125,8 +126,8 @@ async function history(page: Page): Promise<EventEnvelope[]> {
 }
 
 async function submit(page: Page, text: string) {
-  await page.getByRole('textbox', { name: 'Message', exact: true }).fill(text);
-  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await page.getByRole('textbox', { name: '消息', exact: true }).fill(text);
+  await page.getByRole('button', { name: '发送消息', exact: true }).click();
 }
 
 async function snapshot(page: Page) {
@@ -156,8 +157,10 @@ async function assertTrace(page: Page, events: EventEnvelope[]) {
   await expect(page.locator('.trace-row')).toHaveCount(events.length);
   const rendered = await snapshot(page);
   expect(rendered.trace.map(({ sequence, type, occurredAt }) => ({ sequence, type, occurredAt })))
-    .toEqual(events.map(({ sequence, type, occurredAt }) => ({ sequence, type, occurredAt })));
-  expect(rendered.trace.every((event) => !!event.visibleTime?.trim())).toBe(true);
+    .toEqual(events.map(({ sequence, type, occurredAt }) => ({ sequence, type: EVENT_LABELS[type], occurredAt })));
+  const visibleTimes = await page.evaluate((timestamps) => timestamps.map((timestamp) =>
+    new Date(timestamp).toLocaleTimeString('zh-CN', { hour12: false })), events.map((event) => event.occurredAt));
+  expect(rendered.trace.map((event) => event.visibleTime)).toEqual(visibleTimes);
 }
 
 async function captureLayout(app: ElectronApplication, page: Page, info: TestInfo, width: number, height: number) {
@@ -228,8 +231,9 @@ test('packaged renderer is isolated and its named bridge rejects malformed reque
     };
   })).toEqual({
     require: 'undefined', process: 'undefined',
-    keys: ['onEvent', 'readConversation', 'submitMessage'],
-    types: ['function', 'function', 'function'],
+    keys: ['cancelRun', 'chooseWorkspace', 'clearWorkspace', 'decideFileEdit', 'deleteModelApiKey', 'onEvent', 'readConversation',
+      'readModelSettings', 'readPendingFileEdit', 'readWorkspace', 'saveModelSettings', 'setWorkspaceConsent', 'submitMessage'],
+    types: Array(13).fill('function'),
   });
   const before = await history(page);
   expect(before.map((event) => event.type)).toEqual(['conversation.created']);
@@ -257,7 +261,7 @@ test('packaged renderer is isolated and its named bridge rejects malformed reque
 test('streams a full conversation and restores exact transcript and timestamped event order after orderly restart', async ({ desktop }, info) => {
   const { app, page } = await desktop.launch();
   const prompt = 'Explain why this local conversation survives a restart.';
-  const answer = 'Local mock response: Explain why this local conversation survives a restart.\n\nNo model, tools, or network requests were used.';
+  const answer = `本地模拟回复：${prompt}\n\n本次未调用真实模型、工具或网络请求。`;
   const broadcasts: EventEnvelope[] = [];
   const persistenceErrors: string[] = [];
   const observations: Promise<void>[] = [];
@@ -279,14 +283,14 @@ test('streams a full conversation and restores exact transcript and timestamped 
     window.agent!.onEvent((event) => { void record(event); });
   });
   await submit(page, prompt);
-  const agent = page.getByRole('article', { name: 'Agent message', exact: true });
-  await expect(agent.locator('.message-status')).toHaveText('Streaming');
+  const agent = page.getByRole('article', { name: '智能体消息', exact: true });
+  await expect(agent.locator('.message-status')).toHaveText('生成中');
   await expect.poll(async () => {
     const text = await agent.locator('.message-text').textContent();
     return !!text && text.length < answer.length;
   }, { intervals: [10, 20, 30] }).toBe(true);
   await expect(agent.locator('.message-text')).toHaveText(answer);
-  await expect(page.getByRole('status')).toHaveText('Ready');
+  await expect(page.getByRole('status')).toHaveText('就绪');
   const events = await history(page);
   expect(events.slice(0, 4).map((event) => event.type)).toEqual([
     'conversation.created', 'message.user.created', 'run.started', 'message.agent.created',
@@ -303,8 +307,8 @@ test('streams a full conversation and restores exact transcript and timestamped 
   await assertTrace(page, events);
   const before = await snapshot(page);
   expect(before.transcript).toEqual([
-    { role: 'You message', text: prompt, failed: false },
-    { role: 'Agent message', text: answer, failed: false },
+    { role: '你的消息', text: prompt, failed: false },
+    { role: '智能体消息', text: answer, failed: false },
   ]);
   await captureLayout(app, page, info, 1280, 800);
   await captureLayout(app, page, info, 600, 480);
@@ -319,20 +323,20 @@ test('streams a full conversation and restores exact transcript and timestamped 
 test('persists provider failure, accepts the next prompt, and keeps duplicate request IDs idempotent across restart', async ({ desktop }) => {
   const { app, page } = await desktop.launch();
   await submit(page, '[simulate-failure]');
-  await expect(page.getByRole('alert')).toHaveText('Run failed.');
-  await expect(page.getByRole('status')).toHaveText('Ready');
+  await expect(page.getByRole('alert')).toHaveText(RUN_ERROR_MESSAGES.PROVIDER_FAILED);
+  await expect(page.getByRole('status')).toHaveText('就绪');
   const failed = await history(page);
   expect(failed.map((event) => event.type)).toEqual([
     'conversation.created', 'message.user.created', 'run.started', 'message.agent.created', 'run.failed',
   ]);
   expect(failed.at(-1)).toMatchObject({ payload: { code: 'PROVIDER_FAILED' } });
-  await expect(page.locator('.message-failed')).toHaveText('Failed');
+  await expect(page.locator('.message-failed')).toHaveText('失败');
   expect(await readJournal(desktop.userData)).toEqual(failed);
   const prompt = 'Continue successfully after the local failure.';
-  const answer = 'Local mock response: Continue successfully after the local failure.\n\nNo model, tools, or network requests were used.';
+  const answer = `本地模拟回复：${prompt}\n\n本次未调用真实模型、工具或网络请求。`;
   await submit(page, prompt);
-  await expect(page.getByRole('article', { name: 'Agent message', exact: true }).last().locator('.message-text')).toHaveText(answer);
-  await expect(page.getByRole('status')).toHaveText('Ready');
+  await expect(page.getByRole('article', { name: '智能体消息', exact: true }).last().locator('.message-text')).toHaveText(answer);
+  await expect(page.getByRole('status')).toHaveText('就绪');
   await expect(page.getByRole('alert')).toHaveCount(0);
   const events = await history(page);
   expect(events.at(-1)?.type).toBe('run.completed');
@@ -344,10 +348,10 @@ test('persists provider failure, accepts the next prompt, and keeps duplicate re
   await assertTrace(page, events);
   const before = await snapshot(page);
   expect(before.transcript).toEqual([
-    { role: 'You message', text: '[simulate-failure]', failed: false },
-    { role: 'Agent message', text: '', failed: true },
-    { role: 'You message', text: prompt, failed: false },
-    { role: 'Agent message', text: answer, failed: false },
+    { role: '你的消息', text: '[simulate-failure]', failed: false },
+    { role: '智能体消息', text: '', failed: true },
+    { role: '你的消息', text: prompt, failed: false },
+    { role: '智能体消息', text: answer, failed: false },
   ]);
   await desktop.quit(app);
   expect(await readJournal(desktop.userData)).toEqual(events);

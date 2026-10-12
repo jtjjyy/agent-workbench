@@ -1,38 +1,27 @@
 import { Activity } from 'lucide-react';
-import { useEffect, useRef } from 'react';
 import type { EventEnvelope } from '../../shared/contracts';
+import { EVENT_LABELS, UI_LOCALE } from '../../shared/zh-CN';
 
 export function EventTrace({ events }: { events: EventEnvelope[] }) {
-  const listRef = useRef<HTMLOListElement>(null);
-  const followsTail = useRef(true);
-
-  useEffect(() => {
-    if (listRef.current && followsTail.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [events]);
-
   return (
-    <section className="event-trace" aria-label="Event trace">
+    <section className="event-trace" aria-label="事件轨迹">
       <header className="section-header">
-        <h2><Activity size={15} aria-hidden="true" />Event trace</h2>
-        <span className="event-count">{events.length}</span>
+        <h2><Activity size={15} aria-hidden="true" />事件轨迹</h2>
+        <span className="event-count" aria-label={`${events.length} 条事件`}>{events.length}</span>
       </header>
       <div className="trace-columns" aria-hidden="true">
-        <span>Seq</span><span>Time</span><span>Event</span>
+        <span>序号</span><span>时间</span><span>事件</span>
       </div>
-      <ol className="trace-list" ref={listRef} onScroll={(event) => {
-        const list = event.currentTarget;
-        followsTail.current = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
-      }}>
+      <ol className="trace-list">
         {events.map((event) => (
           <li className={event.type === 'run.failed' ? 'trace-row trace-failed' : 'trace-row'}
             key={event.sequence}>
             <span className="trace-sequence">{event.sequence}</span>
             <time dateTime={event.occurredAt}>
-              {new Date(event.occurredAt).toLocaleTimeString([], { hour12: false })}
+              {new Date(event.occurredAt).toLocaleTimeString(UI_LOCALE, { hour12: false })}
             </time>
-            <span className="trace-type">{event.type}</span>
+            <span className="trace-type">{event.type === 'tool.completed' && event.payload.isError
+              ? '工具执行失败' : EVENT_LABELS[event.type] || '未知事件'}</span>
           </li>
         ))}
       </ol>

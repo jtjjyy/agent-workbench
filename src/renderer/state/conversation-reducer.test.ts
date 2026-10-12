@@ -70,7 +70,7 @@ describe('conversationReducer', () => {
       messageId: 'agent-1', runId: 'run-1', text: 'Missing chunk',
     }));
     expect(state.reloadRequired).toBe(true);
-    expect(state.error).toMatch(/reload/i);
+    expect(state.error).toBe('会话状态不同步，请重新加载。');
     expect(state.lastSequence).toBe(4);
     expect(state.events).toEqual(before.events);
     expect(state.messages[1].text).toBe('');
@@ -108,7 +108,7 @@ describe('conversationReducer', () => {
     expect(state.activeRunId).toBeNull();
     expect(state.messages.map(({ text }) => text)).toEqual(['Hello', 'Partial']);
     expect(state.messages[1].status).toBe('failed');
-    expect(state.error).toMatch(/failed/i);
+    expect(state.error).toBe('任务未完成，你可以重新发送消息。');
     expect(state.reloadRequired).toBe(false);
     const next = conversationReducer(state, event(7, 'run.started', { runId: 'run-2', sourceMessageId: 'user-2' }));
     expect(next.error).toBeNull();

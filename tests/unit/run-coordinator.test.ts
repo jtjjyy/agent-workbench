@@ -37,7 +37,7 @@ test('persists a full deterministic streamed run in contiguous event order', asy
   const deltas = events.filter((event) => event.type === 'message.agent.delta');
   expect(deltas.length).toBeGreaterThan(1);
   expect(deltas.map((event) => event.payload.text).join('')).toBe(
-    'Local mock response: Explain this project\n\nNo model, tools, or network requests were used.',
+    `本地模拟回复：${request.text}\n\n本次未调用真实模型、工具或网络请求。`,
   );
   expect(events.at(-1)?.type).toBe('run.completed');
   expect(events.map((event) => event.sequence)).toEqual(events.map((_, index) => index + 1));

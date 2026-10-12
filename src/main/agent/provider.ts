@@ -10,7 +10,7 @@ export function createDeterministicProvider(options: {
     async streamReply(input, signal, onDelta) {
       signal.throwIfAborted();
       if (options.failOnPrompt?.(input.text)) throw new Error('Simulated provider failure');
-      const response = `Local mock response: ${input.text}\n\nNo model, tools, or network requests were used.`;
+      const response = `本地模拟回复：${input.text}\n\n本次未调用真实模型、工具或网络请求。`;
       for (let offset = 0; offset < response.length; offset += 12) {
         signal.throwIfAborted();
         if (delay > 0) {
