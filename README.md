@@ -1,86 +1,187 @@
-# Agent Workbench
+# 开发者智能体工作台
 
-Local-first, single-user Windows desktop portfolio project.
+单用户、本地优先的 Windows 桌面作品项目，内部项目名称为 `agent-workbench`。
 
-## Stage 0-1
+## 语言约定
 
-This slice uses a deterministic local Mock provider. It is not a real-model
-Agent, does not integrate Pi, and has no tools, shell execution, retrieval,
-MCP or network model requests. Model quality and cost are not measured.
+客户端及后续新增的说明默认使用简体中文。具体要求写在根目录 `AGENTS.md`，
+共享事件和错误文案维护在 `src/shared/zh-CN.ts`。技术标识、模型 ID、代码、路径和
+第三方品牌保留原样，避免破坏协议、配置和引用。
 
-## Development
+模型系统提示默认要求使用简体中文，但不能保证外部模型绝不会输出其他语言。
+历史消息及外部原文不自动翻译，不覆盖用户已有内容。仅修改展示标题，不更改
+`package.json` 的内部名称或产品标识，因此原应用数据目录不因中文化迁移。
 
-Use Node.js 24.15.0 and npm (the lockfile fixes resolved dependencies):
+## 当前进度
+
+第九阶段已接入声明式 Skills：内置代码仓库理解、技术资料调研、变更验证与复盘三个 Skill，支持本地 `SKILL.md`、启用状态持久化、按任务关键词匹配和中文管理面板。Skill 只提供任务方法，不能新增工具权限、命令执行、MCP 权限或绕过文件审批。当前源码与测试已写入，但仍未运行测试、类型检查、lint、构建、打包、浏览器自动化或真实模型请求。
+
+第五阶段已接入本地记忆、项目知识摘要、关键词索引、增量复用和带来源证据的知识检索工具。知识索引位于 Electron 用户数据目录，索引和记忆为本地明文；当前不是向量 RAG，也不是操作系统沙箱。源码已写入但尚未恢复测试、类型检查、lint、构建、打包、浏览器自动化或真实模型验证，详见 `docs/learning/stage5-memory-knowledge.md`。
+
+第 0-1 阶段的历史验收证据单独保留。第 2 阶段新增 DeepSeek 设置、Pi 模型传输、
+流式回复、取消、超时和服务端返回的用量。第 2 阶段代码写入时未运行测试验证；
+随后按用户要求启动了开发客户端，启动流程包含编译和自动类型检查。
+能够启动不代表密钥、真实模型请求、安全异常或打包流程均已验证。
+
+原第 1 阶段安装包仍然是本地模拟版本，不是 DeepSeek 或中文化后的新安装包。
+中文化迭代不额外运行单元测试、端到端测试或真实模型请求。
+
+第 3 阶段源码已接入 Pi 单 Agent 内核、授权工作区、三种只读工具、工具事件和来源快照。
+本轮仍暂停测试验证，不把源码接线或依赖安装当成已验收。新安装包尚未生成。
+
+第 4 阶段源码新增已有文本文件的唯一片段替换、逐次审批与中文差异预览。
+当前仍未运行本阶段测试、编译、启动或真实模型调用，不代表写入能力已验收。
+
+## 配置 DeepSeek
+
+在本项目目录执行 `npm start` 打开桌面客户端，点击右上角“模型设置”。
+此命令包含正常编译和自动类型检查，并非只打开既有安装包。
+
+选择 DeepSeek，选择 `deepseek-flash` 或 `deepseek-v4-pro`，输入新生成的 API 密钥，
+明确同意数据外发后保存。保存设置不触发连接测试或真实请求，发送消息才会调用模型。
+默认使用本地模拟；真实模型失败后不会悄悄切回模拟回复。
+聊天中曾暴露的密钥未保存或使用，应在供应商后台撤销并生成替代密钥。
+
+主进程只向固定 `https://api.deepseek.com` 端点发送模型请求，不接受任意目标地址或
+重定向。外发内容包括当前消息、固定系统提示，以及最近成功的 DeepSeek 对话：
+最多 6 组、合计不超过 24,000 个 UTF-16 代码单元。失败、取消、截断和模拟回复不进入
+上下文。这是字符长度限制，不是精确分词或语义压缩。
+没有工作区外发授权时不开放仓库工具；仓库任务历史不再进入后续普通聊天上下文。
+
+## 只读工作区（第 3 阶段源码）
+
+选择目录只授权本地范围，不等于同意仓库内容外发。需要另外勾选工作区外发同意，
+文件名、相对路径、工具读取的内容和搜索结果才会作为上下文发送给 DeepSeek。
+切换目录或重启后重新授权；同意或撤销只能在任务结束后变更。
+有工作区的任务不带入历史聊天；撤销后新任务不带入先前仓库任务的问答。
+
+第 3 阶段仅包含文件列表、按行读取、字面文本搜索；文件修改能力另见第 4 阶段。
+当前仍不提供命令执行或 MCP。
+文件列表只检查元数据，不读取正文，也不保证白名单扩展名文件的正文确为文本；
+读取与搜索才进行有界 UTF-8 检查并生成内容来源。
+Mock 仍只返回固定文本，不执行仓库工具。只读工具不是增量索引或语义检索。
+工具轨迹记录实际开始和结果；来源显示相对路径、行号、文件 SHA-256 和受限片段，
+属于读取时快照，不保证当前文件仍相同，也不意味着模型回答的所有引用已自动校验。
+
+任务最多 8 次模型请求、12 次工具尝试；上下文、累计工具输出及回复设字符硬上限，
+仍沿用超时、取消和零自动重试。所有模型轮次都有服务端用量时才展示合计，否则未知。
+上限不是美元成本保证，工具错误及取消任务仍可能消耗模型费用。
+
+文件边界采用应用策略：拒绝越界、链接、常见敏感文件和不支持的类型，
+遍历及读取有上限；不能抵御同权限恶意进程的路径竞态，也不能保证普通源码不含秘密。
+日志保留来源片段，仍为本地明文，不能当作秘密清除或操作系统沙箱。
+新协议能读取原 schema-v1 日志，但旧版本程序不能读取新增工具事件，
+第 4 阶段又扩展了审批与写入事件，旧程序同样不支持这些事件。
+降级前请保留数据副本，本轮不自动迁移或覆盖历史文件。
+
+计划见 `docs/superpowers/plans/2026-10-10-readonly-agent.md`；
+工具知识、面试问题和个人练习见 `docs/learning/stage3-readonly-tools.md`，
+运行时映射与主线、独立实验、原理学习分类见 `docs/learning/stage3-pi-runtime.md`。
+
+## 限定文件修改（第 4 阶段源码）
+
+`replace_text` 只能修改工作区内已经存在的白名单 UTF-8 文本文件中的唯一非空匹配片段。
+不支持创建、删除、重命名、通用补丁或 shell；文件最大 32 KiB，修改前后文本各不超过
+12,000 个 UTF-16 单元。其他已有内容由当前文件快照保留，不先清空文件，也不重置 Git。
+
+模型提出修改后，客户端展示完整有界差异、相对路径、前后 SHA-256 及到期时间，
+只有你确认当前具体提案后执行器才开始写入。选择工作区或同意外发不等于批准写入。
+每次审批独立编号，绑定任务、工具调用、工作区、路径和前后字节哈希；一次消费，
+60 秒到期。任务总超时仍包含等待审批时间，界面确认回执不是写入成功证明。
+
+写入前重新核对文件身份和原始内容，已经变化则拒绝旧提案，需要重新提案审批。
+沿用只读路径策略，额外拒绝多硬链接文件。审批正文只供本次内存与界面展示，
+持久化事件只记录审批身份、相对路径、摘要哈希和执行状态，不新增完整差异正文。
+模型已经生成的工具参数与仓库来源仍可能外发或进入既有消息日志，这不是秘密清除机制。
+
+审批、写入开始与完成分别记轨迹；开始事件先追加成功才调用写入。
+日志没有 fsync，不能把先追加称为断电级事务保证。写入后取消不能保证撤销已写内容；
+不确定结果中止任务并要求人工检查，不自动重试、回滚或中断后重放。
+Node 常规文件 API 没有跨进程原子 compare-and-swap，策略和复查不能消除恶意进程、
+所有路径竞态、检查写入间并发修改、断电及部分写入风险。仅用于可恢复的实验仓库，
+不是 OS 沙箱，也没有本轮安全测试证据。
+
+实施计划见 `docs/superpowers/plans/2026-10-10-approved-file-edit.md`；
+学习映射见 `docs/learning/stage4-file-edit.md` 与 `docs/learning/stage4-approval-runtime.md`。
+
+设置位于 Electron 用户数据目录下的 `settings/model-v1.json`。密钥通过
+Electron safeStorage 加密，系统加密不可用时禁止使用密钥。Windows DPAPI 不能
+防护与当前用户同权限运行的其他程序。客户端只收到“是否已保存密钥”，不回传原密钥。
+
+会话记录仍以明文保存，JavaScript 密码字符串无法可靠清零。删除密钥会移除应用内
+配置并切回本地模拟，不等于在供应商后台撤销，也不保证取证级擦除。
+
+当前使用非思考模式，不自动重试，输出限制为 512-8192 个词元，超时为 15-180 秒。
+取消绑定当前运行 ID，并保留已生成内容，但不保证服务端立即停止计费。
+完成任务后展示实际返回的词元用量；缺失用量表示未知，不代表费用为零。
+失败或取消的任务仍可能收费，没有实测费用或性能提升声明，中断请求不自动重放。
+
+实施范围和待补证据见 `docs/superpowers/plans/2026-10-10-deepseek-integration.md`，
+学习与面试映射见 `docs/learning/stage2-deepseek.md`。
+
+## 开发入口
+
+使用 Node.js 24.15.0 和 npm，锁文件记录确切依赖。正常启动：
 
 ```powershell
 npm ci
+npm start
+```
+
+以下是可选的测试与交付命令，需恢复验证工作后再执行，本次没有运行：
+
+```powershell
 npm run typecheck
 npm run lint
 npm test
-npm start
 npm run package
 npm run test:e2e
 npm run make
 ```
 
-`npm start` opens an Electron desktop window, not a browser website.
-Unit/component/integration tests are separate from packaged Electron E2E.
-Packaging and installer generation do not prove installation succeeded.
+`npm start` 打开 Electron 桌面窗口，不是浏览器网页。单元、组件、集成测试与
+真实打包客户端的端到端测试分开，生成安装包不等于验证安装成功。
 
-## Architecture And Learning
+## 架构与学习
 
-See `outputs/agent-workbench-design.md`, the approved implementation plan in
-`docs/superpowers/plans/`, and `docs/learning/stage1-checkpoints.md`.
+设计见 `outputs/agent-workbench-design.md`，实施计划见 `docs/superpowers/plans/`，
+学习记录见 `docs/learning/`。历史英文资料保留，不冒充为本轮新增中文交付。
 
-The renderer has no Node integration. Context isolation, a renderer sandbox,
-local CSP and application IPC validation reduce exposed privileges; they do
-not isolate arbitrary tools running in main or replace an OS execution boundary.
-Storage append is not an fsync/power-loss durability guarantee.
+渲染进程没有 Node 权限；上下文隔离、渲染进程沙箱、本地 CSP 和 IPC 参数校验
+减少暴露权限，但不隔离主进程任意工具，也不能替代操作系统执行边界。
+会话日志串行追加，但未进行 fsync，不保证断电持久化。
 
-The official Forge 8.0.1 initializer changed its CLI. The equivalent official
-Webpack/TypeScript scaffold is generated with
-`npx create-electron-app@8.0.1 work/forge-seed --template webpack --typescript`.
-Its ESM Forge config is `forge.config.mts`, not the plan's illustrative `.ts`.
-Forge-provided Webpack rules and separate renderer/main builds are retained.
-Reference scaffold and tool dependencies retain their upstream licenses.
+项目保留 Forge 8.0.1 官方 Webpack/TypeScript 模板及独立主进程/客户端构建。
+初始化命令为 `npx create-electron-app@8.0.1 work/forge-seed --template webpack --typescript`，
+实际 Forge 配置是 `forge.config.mts`。模板和依赖保留各自上游许可。
 
-## Packaged Test And Delivery
+## 历史交付与限制
 
-Run `npm run package` before `npm run test:e2e`. The E2E uses the actual
-Windows x64 packaged executable, not a browser or mocked IPC. Each case has
-an isolated temporary profile and verifies graceful shutdown before cleanup.
-Screenshots and failures are written to ignored `test-results/`.
+第 0-1 阶段只有固定本地模拟回复，没有真实模型、Pi、工具、检索、命令执行或 MCP。
+该阶段未测量模型质量、费用或商业收益，不能把历史测试结果用作第 2-4 阶段证据。
 
-The unpacked application is
-`out/Agent Workbench-win32-x64/Agent Workbench.exe`.
-Squirrel and ZIP artifacts are generated under `out/make/`.
-See `outputs/stage1-delivery.md` for dated verification and known limitations.
-The installer is unsigned; its creation is not an installation test.
+历史端到端测试使用真实 Windows x64 打包程序，每个用例采用隔离临时配置目录。
+运行前需打包，截图及错误写入忽略目录 `test-results/`。
+历史程序路径为 `out/Agent Workbench-win32-x64/Agent Workbench.exe`，
+Squirrel 和 ZIP 产物位于 `out/make/`。详情见 `outputs/stage1-delivery.md`。
+安装包未签名，未声称已完成安装测试。
 
-Enter `[simulate-failure]` to exercise the documented local provider failure.
-All other prompts receive a fixed echo-like Mock response. Normal launch
-stores the journal under Electron's default `userData`, in
-`events/conversation-v1.jsonl`. This journal contains prompt and response text
-in plaintext. The renderer cannot select an arbitrary journal path.
+本地模拟模式下，输入 `[simulate-failure]` 可触发模拟失败，其余输入产生固定回复。
+正常会话日志位于用户数据目录 `events/conversation-v1.jsonl`，包含明文消息。
+渲染进程不能选择任意日志路径，其 CSP 仍为 `connect-src 'none'`；
+第 2 阶段授权后的模型请求由主进程发起。依赖下载和系统后台行为不构成全应用网络隔离。
 
-The renderer uses `connect-src 'none'` and no model adapter performs network
-requests. Dependency downloads and Chromium/OS background behavior are not a
-verified application-wide network isolation boundary.
+当前是作品开发版，不是安全加固的生产发行版：
 
-## Release Limitations
+- 为打包 Playwright 自动化保留 Node 调试传输。
+- 为 style-loader 允许内联样式，不允许内联脚本或 eval。
+- 开发服务只绑定回环地址，完整开发依赖存在历史审计问题，不应对公网开放。
+- 不承诺外部并发改日志、任意工具自动回滚或断电恢复；追加时重读日志，未声称大规模性能收益。
+- 真实模型、Pi 工具循环、写入审批和取消流程尚无本轮测试证据；增量检索、命令执行、迁移、备份和完整任务恢复仍待实现。
 
-This is a portfolio development slice, not a hardened production release:
+原创项目代码使用 MIT 许可。复用范围和上游许可见 `LICENSE` 与 `THIRD_PARTY_NOTICES.md`。
+## 工具能力
 
-- The Node inspector fuse remains enabled for packaged Playwright automation.
-- Inline styles are allowed for Webpack style-loader; inline scripts/eval are not.
-- The development server binds to loopback only. The full development dependency
-  tree has known audit findings; see the delivery report. Do not expose it publicly.
-- Journal writes are serialized but not fsynced. Concurrent external journal
-  modification, arbitrary tool rollback and power-loss survival are not promised.
-- The journal is reread on append; this favors auditability over large-history
-  performance in Stage 1. No performance gain is claimed.
-- No user-facing cancel button, real-model credentials, tools, search, migrations,
-  backups or full task recovery exist in this slice.
+当前 Agent 运行时已接入受控 PowerShell、网页搜索、网页读取和 Electron 浏览器能力。所有工具都经过 Pi Agent Core 的结构化参数校验、调用预算、取消和工具轨迹；命令执行、浏览器点击和输入需要绑定本次具体参数的审批。
 
-Original project code is MIT licensed. See `LICENSE` and
-`THIRD_PARTY_NOTICES.md` for reuse boundaries and upstream licensing.
+工具能力的实际边界见 [`docs/learning/stage10-tools.md`](docs/learning/stage10-tools.md)。审批不是操作系统沙箱，命令或网页内容也不自动成为可信证据。
