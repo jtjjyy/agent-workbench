@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, CircleHelp, FilePenLine, FileText, LoaderCircle, Search, FolderTree, Wrench } from 'lucide-react';
 import { useMemo } from 'react';
 import type { EventEnvelope } from '../../shared/contracts';
-import type { ReadonlyToolName } from '../../shared/workspace';
+import type { WorkspaceToolName } from '../../shared/workspace';
 import type { EditOutcomeStatus } from '../../shared/file-edit';
 
 type ToolStartedEvent = Extract<EventEnvelope, { type: 'tool.started' }>;
@@ -16,7 +16,9 @@ interface ToolEntry {
   completed?: ToolCompletedEvent;
 }
 
-const TOOL_NAMES: Record<ReadonlyToolName | 'replace_text' | 'search_knowledge' | 'read_project_knowledge' | 'run_powershell' | 'web_search' | 'web_fetch' | 'browser_open' | 'browser_read' | 'browser_screenshot' | 'browser_click' | 'browser_type' | 'unknown', string> = {
+const TOOL_NAMES: Record<WorkspaceToolName | 'unknown', string> = {
+  update_task_plan: '更新任务计划', read_task_state: '读取任务状态', propose_change_set: '提出多文件变更',
+  run_verification: '验证代码变更', deliver_changes: '核对交付证据',
   run_powershell: '执行 PowerShell', web_search: '搜索网页', web_fetch: '读取网页',
   browser_open: '打开网页', browser_read: '读取页面', browser_screenshot: '页面截图',
   browser_click: '点击页面元素', browser_type: '输入页面文本',
@@ -32,7 +34,9 @@ const TOOL_NAMES: Record<ReadonlyToolName | 'replace_text' | 'search_knowledge' 
 const TOOL_ICONS = { list_files: FolderTree, read_file: FileText, search_text: Search,
   replace_text: FilePenLine, search_knowledge: FileText, read_project_knowledge: FolderTree,
   run_powershell: Wrench, web_search: Search, web_fetch: FileText, browser_open: FolderTree,
-  browser_read: FileText, browser_screenshot: FileText, browser_click: Wrench, browser_type: Wrench, unknown: Wrench };
+  browser_read: FileText, browser_screenshot: FileText, browser_click: Wrench, browser_type: Wrench,
+  update_task_plan: FolderTree, read_task_state: FileText, propose_change_set: FilePenLine,
+  run_verification: Wrench, deliver_changes: FileText, unknown: Wrench };
 
 const EDIT_STATUS: Record<EditOutcomeStatus, string> = {
   applied: '已写入', rejected: '已拒绝', expired: '已到期', cancelled: '已取消',

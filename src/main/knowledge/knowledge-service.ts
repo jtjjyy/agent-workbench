@@ -41,7 +41,8 @@ export class KnowledgeService implements KnowledgeAccess {
       return old && old.size === file.stat.size.toString() && old.mtimeNs === file.stat.mtimeNs.toString()
         && old.ctimeNs === file.stat.ctimeNs.toString() && old.sha256 === file.sha256 ? old : buildFileRecord(file);
     });
-    const summary: ProjectKnowledgeSummary = { projectKey, indexedAt: new Date().toISOString(), files: records.map((file) => file.path),
+    const indexedAt = new Date().toISOString();
+    const summary: ProjectKnowledgeSummary = { projectKey, indexedAt, files: records.map((file) => file.path),
       extensionCounts: {}, entryCandidates: [], notes: [] };
     for (const file of records) {
       const extension = file.path.includes('.') ? `.${file.path.split('.').pop()!.toLowerCase()}` : '(无扩展名)';
@@ -49,7 +50,7 @@ export class KnowledgeService implements KnowledgeAccess {
       if (/^(readme|package\.json|tsconfig\.json|src\/main|src\/renderer)/iu.test(file.path)) summary.entryCandidates.push(file.path);
     }
     if (files.length >= 200) summary.notes.push('索引达到单次最多 200 个文本文件的上限。');
-    const index: ProjectIndex = { projectKey, indexedAt: summary.indexedAt, files: records, summary };
+    const index: ProjectIndex = { projectKey, indexedAt, files: records, summary };
     await this.indexStore.write(index);
     const memories = await this.memoryStore.list(projectKey);
     const currentPaths = new Set(records.map((file) => file.path));

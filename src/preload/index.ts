@@ -2,6 +2,19 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { validateEventEnvelope, type AgentBridge, type EventEnvelope } from '../shared/contracts';
 
 const bridge: AgentBridge = {
+  readTasks: () => ipcRenderer.invoke('agent:read-tasks'),
+  pauseTask: (request) => ipcRenderer.invoke('agent:pause-task', request),
+  cancelTask: (request) => ipcRenderer.invoke('agent:cancel-task', request),
+  resumeTask: (request) => ipcRenderer.invoke('agent:resume-task', request),
+  readPendingChangeSet: () => ipcRenderer.invoke('agent:read-pending-change-set'),
+  decideChangeSet: (request) => ipcRenderer.invoke('agent:decide-change-set', request),
+  readChangeSets: (taskId) => ipcRenderer.invoke('agent:read-change-sets', taskId),
+  getDelivery: (taskId) => ipcRenderer.invoke('agent:read-delivery', taskId),
+  readDesktopInfo: () => ipcRenderer.invoke('agent:read-desktop-info'),
+  completeSetup: () => ipcRenderer.invoke('agent:complete-setup'),
+  exportDiagnostics: () => ipcRenderer.invoke('agent:export-diagnostics'),
+  backupDesktop: (request) => ipcRenderer.invoke('agent:backup-desktop', request),
+  restoreDesktop: () => ipcRenderer.invoke('agent:restore-desktop'),
   readConversation: (conversationId) => ipcRenderer.invoke('agent:read-conversation', conversationId),
   submitMessage: (request) => ipcRenderer.invoke('agent:submit-message', request),
   readModelSettings: () => ipcRenderer.invoke('agent:read-model-settings'),

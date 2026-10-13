@@ -19,7 +19,8 @@ export interface SourceEvidence {
 export type ReadonlyToolName = 'list_files' | 'read_file' | 'search_text';
 export type WorkspaceToolName = ReadonlyToolName | 'replace_text' | 'search_knowledge' | 'read_project_knowledge'
   | 'run_powershell' | 'web_search' | 'web_fetch' | 'browser_open' | 'browser_read'
-  | 'browser_screenshot' | 'browser_click' | 'browser_type';
+  | 'browser_screenshot' | 'browser_click' | 'browser_type'
+  | 'update_task_plan' | 'read_task_state' | 'propose_change_set' | 'run_verification' | 'deliver_changes';
 export interface ToolTrace {
   toolCallId: string;
   toolName: WorkspaceToolName | 'unknown';

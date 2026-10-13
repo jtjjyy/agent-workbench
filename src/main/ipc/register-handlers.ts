@@ -5,6 +5,9 @@ import type { DecideFileEditRequest, DecideFileEditResult, PendingFileEdit } fro
 import type { KnowledgeSearchResult, KnowledgeState, ManagedMemory, MemoryScope, ProjectKnowledgeSummary } from '../../shared/knowledge';
 import type { SkillSummary } from '../../shared/skills';
 import type { CommandApprovalResult, PendingCommandApproval } from '../../shared/command';
+import type { TaskBridge } from '../../shared/tasks';
+import type { ChangeSetBridge, DecideChangeSetRequest } from '../../shared/change-set';
+import { validateDesktopBackupRequest, type DesktopBridge } from '../../shared/desktop';
 
 export interface WindowEndpoint {
   id: number;
@@ -21,7 +24,7 @@ export interface IpcRegistry {
   handle(channel: string, listener: (source: CommandSource, input: unknown) => Promise<unknown>): void;
   removeHandler(channel: string): void;
 }
-export interface RuntimeCommands {
+export interface RuntimeCommands extends Partial<TaskBridge>, Partial<ChangeSetBridge> {
   readConversation(conversationId: string): Promise<EventEnvelope[]>;
   submit(request: SubmitMessageRequest): Promise<SubmitMessageResult>;
   subscribe(listener: (event: EventEnvelope) => void): () => void;
@@ -53,6 +56,7 @@ export function registerHandlers(
   coordinator: RuntimeCommands,
   window: WindowEndpoint,
   expectedUrl: string,
+  desktop?: DesktopBridge,
 ): () => void {
   // Chromium canonicalizes Forge's Windows file entry before exposing its URL.
   const trustedUrl = new URL(expectedUrl).href;
@@ -63,6 +67,98 @@ export function registerHandlers(
       throw new Error('Untrusted IPC sender');
     }
   };
+  const addedChannels: string[] = [];
+  const handle = (channel: string, operation: (input: unknown) => Promise<unknown>) => {
+    addedChannels.push(channel);
+    ipc.handle(channel, async (source, input) => {
+      authorize(source);
+      return operation(input);
+    });
+  };
+  const noInput = (input: unknown) => {
+    if (input !== undefined) throw new Error('此操作不接受额外参数。');
+  };
+  const uuid = (value: unknown): value is string => typeof value === 'string'
+    && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
+  const taskRequest = (input: unknown): { taskId: string } => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)
+      || Object.keys(input).length !== 1 || !uuid((input as Record<string, unknown>).taskId)) {
+      throw new Error('任务操作参数无效。');
+    }
+    return { taskId: (input as { taskId: string }).taskId };
+  };
+  handle('agent:read-tasks', async (input) => {
+    noInput(input);
+    if (!coordinator.readTasks) throw new Error('任务服务尚未连接。');
+    return coordinator.readTasks();
+  });
+  handle('agent:pause-task', async (input) => {
+    const request = taskRequest(input);
+    if (!coordinator.pauseTask) throw new Error('任务服务尚未连接。');
+    return coordinator.pauseTask(request);
+  });
+  handle('agent:cancel-task', async (input) => {
+    const request = taskRequest(input);
+    if (!coordinator.cancelTask) throw new Error('任务服务尚未连接。');
+    return coordinator.cancelTask(request);
+  });
+  handle('agent:resume-task', async (input) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('任务续接参数无效。');
+    const request = input as Record<string, unknown>;
+    if (Object.keys(request).length !== 2 || !uuid(request.taskId)
+      || typeof request.acknowledgeUnknown !== 'boolean') throw new Error('任务续接参数无效。');
+    if (!coordinator.resumeTask) throw new Error('任务服务尚未连接。');
+    return coordinator.resumeTask({ taskId: request.taskId, acknowledgeUnknown: request.acknowledgeUnknown });
+  });
+  handle('agent:read-pending-change-set', async (input) => {
+    noInput(input);
+    return coordinator.readPendingChangeSet?.() ?? null;
+  });
+  handle('agent:read-change-sets', async (input) => {
+    if (input !== undefined && !uuid(input)) throw new Error('变更集查询参数无效。');
+    return coordinator.readChangeSets?.(input as string | undefined) ?? [];
+  });
+  handle('agent:read-delivery', async (input) => {
+    if (!uuid(input)) throw new Error('交付查询参数无效。');
+    if (!coordinator.getDelivery) throw new Error('交付服务尚未连接。');
+    return coordinator.getDelivery(input);
+  });
+  handle('agent:decide-change-set', async (input) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return { ok: false, code: 'APPROVAL_UNAVAILABLE' };
+    const request = input as Record<string, unknown>;
+    const fields = ['runId', 'taskId', 'toolCallId', 'id', 'approvalId', 'bindingDigest', 'decision'];
+    if (Object.keys(request).length !== fields.length || Object.keys(request).some((key) => !fields.includes(key))
+      || ['runId', 'taskId', 'id', 'approvalId'].some((key) => !uuid(request[key]))
+      || typeof request.toolCallId !== 'string' || !request.toolCallId.trim() || request.toolCallId.length > 256
+      || typeof request.bindingDigest !== 'string' || !/^[a-f0-9]{64}$/.test(request.bindingDigest)
+      || !['approved', 'rejected'].includes(request.decision as string)) {
+      return { ok: false, code: 'APPROVAL_UNAVAILABLE' };
+    }
+    const { runId, taskId, toolCallId, id, approvalId, bindingDigest, decision } = request;
+    return coordinator.decideChangeSet?.({ runId, taskId, toolCallId, id, approvalId, bindingDigest, decision } as DecideChangeSetRequest)
+      ?? { ok: false, code: 'APPROVAL_UNAVAILABLE' };
+  });
+  handle('agent:read-desktop-info', async (input) => {
+    noInput(input);
+    if (!desktop) throw new Error('桌面维护服务尚未连接。');
+    return desktop.readDesktopInfo();
+  });
+  handle('agent:complete-setup', async (input) => {
+    noInput(input);
+    return desktop?.completeSetup() ?? { ok: false, code: 'MAINTENANCE_UNAVAILABLE' };
+  });
+  handle('agent:export-diagnostics', async (input) => {
+    noInput(input);
+    return desktop?.exportDiagnostics() ?? { ok: false, code: 'MAINTENANCE_UNAVAILABLE' };
+  });
+  handle('agent:backup-desktop', async (input) => {
+    if (!validateDesktopBackupRequest(input)) return { ok: false, code: 'INVALID_BACKUP' };
+    return desktop?.backupDesktop({ scopes: [...input.scopes] }) ?? { ok: false, code: 'MAINTENANCE_UNAVAILABLE' };
+  });
+  handle('agent:restore-desktop', async (input) => {
+    noInput(input);
+    return desktop?.restoreDesktop() ?? { ok: false, code: 'MAINTENANCE_UNAVAILABLE' };
+  });
   ipc.handle('agent:read-conversation', async (source, input) => {
     authorize(source);
     if (input !== DEFAULT_CONVERSATION_ID) throw new Error('Unknown conversation');
@@ -238,6 +334,7 @@ export function registerHandlers(
   });
   return () => {
     unsubscribe();
+    for (const channel of addedChannels) ipc.removeHandler(channel);
     ipc.removeHandler('agent:read-conversation');
     ipc.removeHandler('agent:submit-message');
     ipc.removeHandler('agent:read-model-settings');

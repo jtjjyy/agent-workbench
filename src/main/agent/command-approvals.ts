@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { CommandApprovalIdentity, CommandApprovalDecision, CommandApprovalResult, PendingCommandApproval } from '../../shared/command';
 import type { CommandExecutionResult } from '../tools/command-executor';
+import type { EventPayloads } from '../../shared/contracts';
 
 type ApprovalEvent = 'command.approval.requested' | 'command.approval.decided';
-type Publish = (type: ApprovalEvent, payload: CommandApprovalIdentity & { expiresAt?: string; decision?: CommandApprovalDecision }) => Promise<void>;
+export type CommandApprovalPublisher = (type: ApprovalEvent, payload: EventPayloads[ApprovalEvent]) => Promise<void>;
 type Pending = { view: PendingCommandApproval; resolve: (decision: CommandApprovalDecision) => void };
 
 function uuid(value: string): boolean { return /^[a-f0-9-]{36}$/i.test(value); }
@@ -26,7 +27,7 @@ export class CommandApprovals {
 
   async request(context: { runId: string; toolCallId: string; workspaceRoot: string; operation?: string;
     bindingInput?: string; preview?: string }, command: string,
-    timeoutMs: number, signal: AbortSignal, publish: Publish,
+    timeoutMs: number, signal: AbortSignal, publish: CommandApprovalPublisher,
     execute: (signal: AbortSignal) => Promise<CommandExecutionResult>): Promise<CommandExecutionResult> {
     signal.throwIfAborted();
     if (!uuid(context.runId) || !context.toolCallId.trim() || context.toolCallId.length > 256 || /[\u0000-\u001f]/u.test(context.toolCallId) || !command.trim()) throw new Error('命令审批参数无效');

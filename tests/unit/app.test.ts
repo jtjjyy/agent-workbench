@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONVERSATION_ID, type AgentBridge, type EventEnvelope, type EventStore, type SubmitMessageRequest } from '../../src/shared/contracts';
 import { DEFAULT_MODEL_SETTINGS } from '../../src/shared/model-settings';
 import { EMPTY_WORKSPACE } from '../../src/shared/workspace';
+import { EMPTY_KNOWLEDGE_STATE } from '../../src/shared/knowledge';
 import { EVENT_LABELS, RUN_ERROR_MESSAGES } from '../../src/shared/zh-CN';
 import { App } from '../../src/renderer/components/App';
 import { RunCoordinator } from '../../src/main/agent/run-coordinator';
@@ -61,10 +62,7 @@ const history: EventEnvelope[] = [
 ];
 
 // Keep historical fixtures structurally compatible with the expanded desktop bridge.
-function modelBridgeFixture(): Pick<AgentBridge,
-  'readModelSettings' | 'saveModelSettings' | 'deleteModelApiKey' | 'cancelRun'
-  | 'readWorkspace' | 'chooseWorkspace' | 'setWorkspaceConsent' | 'clearWorkspace'
-  | 'readPendingFileEdit' | 'decideFileEdit'> {
+function modelBridgeFixture(): Omit<AgentBridge, 'readConversation' | 'submitMessage' | 'onEvent'> {
   return {
     readModelSettings: async () => ({ ...DEFAULT_MODEL_SETTINGS, hasApiKey: false, secureStorageAvailable: false }),
     saveModelSettings: async () => ({ ok: false, code: 'SETTINGS_WRITE_FAILED' }),
@@ -76,6 +74,33 @@ function modelBridgeFixture(): Pick<AgentBridge,
     clearWorkspace: async () => ({ ok: true, workspace: { ...EMPTY_WORKSPACE } }),
     readPendingFileEdit: async () => null,
     decideFileEdit: async () => ({ ok: false, code: 'APPROVAL_UNAVAILABLE' }),
+    readPendingCommand: async () => null,
+    decideCommand: async () => ({ ok: false, code: 'APPROVAL_UNAVAILABLE' }),
+    readKnowledgeState: async () => ({ ...EMPTY_KNOWLEDGE_STATE }),
+    syncKnowledge: async () => ({ ...EMPTY_KNOWLEDGE_STATE }),
+    searchKnowledge: async () => [],
+    readProjectKnowledge: async () => null,
+    readMemories: async () => [],
+    saveMemory: async () => null,
+    deleteMemory: async () => ({ deleted: false }),
+    readSkills: async () => [],
+    setSkillEnabled: async () => [],
+    readTasks: async () => [],
+    pauseTask: async () => ({ ok: false }),
+    cancelTask: async () => ({ ok: false }),
+    resumeTask: async () => ({ ok: false, code: 'TASK_NOT_FOUND' }),
+    readPendingChangeSet: async () => null,
+    decideChangeSet: async () => ({ ok: false, code: 'APPROVAL_UNAVAILABLE' }),
+    readChangeSets: async () => [],
+    getDelivery: async () => { throw new Error('模拟环境没有交付任务。'); },
+    readDesktopInfo: async () => ({ schemaVersion: 1, version: '0.2.0', dataDir: 'C:\\fixture\\data-v1',
+      initialized: true, setupCompleted: true, setupMode: 'mock', configurationReady: true,
+      configurationError: null, migration: { status: 'none', backupPath: null },
+      restartRequired: false, startupStage: 'ready', lastError: null }),
+    completeSetup: async () => ({ ok: false, code: 'MAINTENANCE_UNAVAILABLE' }),
+    exportDiagnostics: async () => ({ ok: false, cancelled: true }),
+    backupDesktop: async () => ({ ok: false, cancelled: true }),
+    restoreDesktop: async () => ({ ok: false, cancelled: true }),
   };
 }
 

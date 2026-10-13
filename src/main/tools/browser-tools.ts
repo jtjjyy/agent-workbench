@@ -1,7 +1,7 @@
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
 import { Type } from 'typebox';
 import type { BrowserSession } from '../browser/browser-session';
-import type { CommandApprovals } from '../agent/command-approvals';
+import type { CommandApprovals, CommandApprovalPublisher } from '../agent/command-approvals';
 
 const openSchema = Type.Object({ url: Type.String({ minLength: 8, maxLength: 2_000 }) }, { additionalProperties: false });
 const selectorSchema = Type.Object({ selector: Type.String({ minLength: 1, maxLength: 300 }) }, { additionalProperties: false });
@@ -10,7 +10,7 @@ type Details = { summary: string; url?: string; screenshotBase64?: string };
 function result(text: string, details: Details, isError = false): AgentToolResult<Details> { return { content: [{ type: 'text', text }], details, isError }; }
 
 export function createBrowserTools(workspace: { root: string | null; dataEgressConsent: boolean }, browser: BrowserSession,
-  approvals: CommandApprovals, context: { runId: string; onApproval: (type: any, payload: any) => Promise<void> }): AgentTool[] {
+  approvals: CommandApprovals, context: { runId: string; onApproval: CommandApprovalPublisher }): AgentTool[] {
   if (!workspace.root || workspace.dataEgressConsent !== true) return [];
   const approved = async (toolCallId: string, operationName: 'browser_click' | 'browser_type', action: string,
     signal: AbortSignal | undefined, operation: () => Promise<{ url: string; text?: string }>, bindingInput?: string,

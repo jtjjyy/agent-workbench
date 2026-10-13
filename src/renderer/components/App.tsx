@@ -13,6 +13,9 @@ import { WorkspaceBar } from './WorkspaceBar';
 import { KnowledgePanel } from './KnowledgePanel';
 import { SkillsPanel } from './SkillsPanel';
 import { CommandApproval } from './CommandApproval';
+import { TaskPanel } from './TaskPanel';
+import { ChangeSetReview } from './ChangeSetReview';
+import { DesktopPanel } from './DesktopPanel';
 
 export function App() {
   const [state, setState] = useState(createConversationState);
@@ -29,8 +32,11 @@ export function App() {
   const [settingsReadError, setSettingsReadError] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
+  const [desktopBusy, setDesktopBusy] = useState(false);
+  const [restartRequired, setRestartRequired] = useState(false);
   const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [awaitingCommandApproval, setAwaitingCommandApproval] = useState(false);
+  const [awaitingChangeSet, setAwaitingChangeSet] = useState(false);
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const pendingRequest = useRef<SubmitMessageRequest | null>(null);
   const settingsMutation = useRef(false);
@@ -45,6 +51,7 @@ export function App() {
   const followsTail = useRef(true);
   const traceFollowsTail = useRef(true);
   const bridge = window.agent;
+  const onRestartRequired = useCallback(() => { setRestartRequired(true); }, []);
 
   useLayoutEffect(() => {
     mounted.current = true;
@@ -133,7 +140,7 @@ export function App() {
     if (transcriptRef.current && followsTail.current) {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
-  }, [state.messages, awaitingApproval, awaitingCommandApproval]);
+  }, [state.messages, awaitingApproval, awaitingCommandApproval, awaitingChangeSet]);
 
   useEffect(() => {
     if (tracePanelRef.current && traceFollowsTail.current) {
@@ -150,28 +157,29 @@ export function App() {
 
   const configurationError = settingsReadError || (settings?.configurationError
     ? settingsErrorText(settings.configurationError) : null);
-  const disabled = runtimeUnavailable || !bridge || loading || !!historyError || state.reloadRequired
+  const disabled = runtimeUnavailable || restartRequired || desktopBusy || !bridge || loading || !!historyError || state.reloadRequired
     || !!state.activeRunId || pending || settingsBusy || workspaceBusy || settingsOpen || settingsLoading || !settings
     || !!configurationError;
-  const error = runtimeUnavailable
+  const error = restartRequired ? '数据已恢复，请关闭所有客户端窗口并重新启动。'
+    : runtimeUnavailable
     ? runErrorText('JOURNAL_WRITE_FAILED')
     : historyError || submitError || state.error || configurationError;
-  const status = runtimeUnavailable ? '不可用' : !bridge ? '未连接' : loading || settingsLoading ? '加载中'
+  const status = restartRequired ? '需要重启' : desktopBusy ? '数据维护中' : runtimeUnavailable ? '不可用' : !bridge ? '未连接' : loading || settingsLoading ? '加载中'
     : historyError ? '不可用' : state.reloadRequired ? '需要重新加载'
       : cancellingRunId && state.activeRunId === cancellingRunId ? '取消中'
-        : state.activeRunId ? (awaitingApproval || awaitingCommandApproval ? '待审批' : '运行中') : pending ? '发送中' : workspaceBusy ? '工作区处理中'
+        : state.activeRunId ? (awaitingApproval || awaitingCommandApproval || awaitingChangeSet ? '待审批' : '运行中') : pending ? '发送中' : workspaceBusy ? '工作区处理中'
           : configurationError ? '设置不可用' : '就绪';
   const actualProvider = state.activeRunId ? state.runProvider : settings?.provider;
   const actualModel = state.activeRunId ? state.runModel : settings?.provider === 'deepseek' ? settings.model : undefined;
   const providerLabel = actualProvider === 'mock' ? '本地模拟'
     : actualProvider === 'deepseek' ? 'DeepSeek' : '未知提供方';
-  const settingsBlocked = pending || !!state.activeRunId || workspaceBusy || runtimeUnavailable || loading
+  const settingsBlocked = restartRequired || desktopBusy || pending || !!state.activeRunId || workspaceBusy || runtimeUnavailable || loading
     || !!historyError || state.reloadRequired || !bridge;
-  const workspaceBlocked = pending || !!state.activeRunId || settingsBusy || settingsOpen || settingsLoading
+  const workspaceBlocked = restartRequired || desktopBusy || pending || !!state.activeRunId || settingsBusy || settingsOpen || settingsLoading
     || runtimeUnavailable || loading || !!historyError || state.reloadRequired || !bridge;
   const canCancel = !!bridge && typeof bridge.cancelRun === 'function' && !runtimeUnavailable
     && !loading && !historyError && !state.reloadRequired;
-  const approvalBlocked = !bridge || runtimeUnavailable || loading || !!historyError || state.reloadRequired
+  const approvalBlocked = restartRequired || desktopBusy || !bridge || runtimeUnavailable || loading || !!historyError || state.reloadRequired
     || settingsBusy || workspaceBusy || settingsOpen || (cancellingRunId === state.activeRunId && !!cancellingRunId);
 
   async function changeSettings(request?: SaveModelSettingsRequest): Promise<ModelSettingsResult> {
@@ -304,6 +312,8 @@ export function App() {
               onPendingChange={setAwaitingApproval} />
             <CommandApproval bridge={bridge} events={state.events} activeRunId={state.activeRunId}
               blocked={approvalBlocked} onPendingChange={setAwaitingCommandApproval} />
+            <ChangeSetReview bridge={bridge} events={state.events} activeRunId={state.activeRunId}
+              blocked={approvalBlocked} reloadKey={reload} onPendingChange={setAwaitingChangeSet} />
           </div>
           {error && (
             <div className="error-row">
@@ -327,8 +337,18 @@ export function App() {
             const panel = event.currentTarget;
             traceFollowsTail.current = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 48;
           }}>
-          <KnowledgePanel bridge={bridge} blocked={workspaceBusy || !!state.activeRunId || settingsOpen || loading || !!historyError} />
-          <SkillsPanel bridge={bridge} blocked={workspaceBusy || !!state.activeRunId || settingsOpen || loading || !!historyError} />
+          <TaskPanel bridge={bridge} activeRunId={state.activeRunId} events={state.events}
+            blocked={workspaceBlocked || !!configurationError} />
+          <DesktopPanel bridge={bridge} blocked={pending || !!state.activeRunId || workspaceBusy || runtimeUnavailable
+            || loading || !!historyError || state.reloadRequired || settingsOpen || settingsBusy || restartRequired}
+            reloadKey={JSON.stringify(settings)}
+            onBusyChange={setDesktopBusy} onRestartRequired={onRestartRequired}
+            onOpenModelSettings={() => {
+              settingsVisible.current = true;
+              setSettingsOpen(true);
+            }} />
+          <KnowledgePanel bridge={bridge} blocked={desktopBusy || restartRequired || workspaceBusy || !!state.activeRunId || settingsOpen || loading || !!historyError} />
+          <SkillsPanel bridge={bridge} blocked={desktopBusy || restartRequired || workspaceBusy || !!state.activeRunId || settingsOpen || loading || !!historyError} />
           <ToolTrace events={state.events} />
           <EventTrace events={state.events} />
         </aside>

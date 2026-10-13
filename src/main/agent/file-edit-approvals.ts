@@ -17,6 +17,8 @@ interface PendingApproval {
 const hash = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 const uuid = (value: unknown): value is string => typeof value === 'string'
   && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
+const validCallId = (value: unknown): value is string => typeof value === 'string'
+  && value.trim().length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
 
 function validProposal(proposal: FileEditProposal): boolean {
   return typeof proposal.path === 'string' && proposal.path.length > 0 && proposal.path.length <= 512
@@ -65,7 +67,7 @@ export class FileEditApprovals {
     proposal: FileEditProposal, apply: ApplyFileEdit, signal: AbortSignal,
     publish: PublishApproval): Promise<EditOutcome> {
     signal.throwIfAborted();
-    if (this.pending || !uuid(context.runId) || !uuid(context.toolCallId) || !validProposal(proposal)) {
+    if (this.pending || !uuid(context.runId) || !validCallId(context.toolCallId) || !validProposal(proposal)) {
       throw new Error('文件修改提案不符合审批协议。');
     }
     const approvalId = randomUUID();

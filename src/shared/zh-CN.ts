@@ -18,7 +18,11 @@ export const EVENT_LABELS: Record<EventType, string> = {
   'approval.decided': '审批决定已记录',
   'file.edit.started': '文件写入开始已记录',
   'file.edit.completed': '文件写入结果已记录',
-  'run.completed': '任务已完成',
+  'change-set.approval.requested': '多文件变更等待审批',
+  'change-set.approval.decided': '变更集审批已记录',
+  'change-set.applying': '变更集开始应用',
+  'change-set.completed': '逐文件应用结果已记录',
+  'run.completed': '本轮运行已结束',
   'run.failed': '任务未完成',
 };
 
@@ -49,6 +53,9 @@ export const RUN_ERROR_MESSAGES = {
   FILE_EDIT_UNCONFIRMED: '文件修改结果未确认，任务已停止。请人工检查文件；不会自动重试或回滚。',
   RUN_TIMEOUT: '任务超过时间限制，已保留生成的内容，你可以重新发送消息。',
   RUN_CANCELLED: '任务已取消，已保留生成的内容。',
+  RUN_PAUSED: '任务已暂停，检查点已保留，可从任务面板续接。',
+  TASK_WRITE_FAILED: '任务记录保存失败，已停止执行。请重启后核对状态。',
+  TASK_INCOMPLETE: '本轮已结束，任务仍有未完成步骤，请从任务面板续接。',
   RUN_INTERRUPTED: '上次任务已中断，未自动重新执行，你可以重新发送消息。',
   JOURNAL_WRITE_FAILED: '本地存储不可用，请重启工作台后再继续。',
 } as const;

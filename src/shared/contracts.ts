@@ -6,6 +6,9 @@ import type { KnowledgeSearchResult, KnowledgeState, ManagedMemory, MemoryScope,
   ProjectKnowledgeSummary } from './knowledge';
 import type { SkillSelection, SkillSummary } from './skills';
 import type { CommandApprovalResult, PendingCommandApproval } from './command';
+import type { TaskBridge, TaskAccess } from './tasks';
+import type { ChangeSetBridge, ChangeSetEvent, ChangeSetEventPayload, ChangeSetAccess } from './change-set';
+import type { DesktopBridge } from './desktop';
 
 export interface RunUsage {
   inputTokens: number;
@@ -33,6 +36,10 @@ export type EventType =
   | 'command.approval.decided'
   | 'file.edit.started'
   | 'file.edit.completed'
+  | 'change-set.approval.requested'
+  | 'change-set.approval.decided'
+  | 'change-set.applying'
+  | 'change-set.completed'
   | 'run.completed'
   | 'run.failed';
 
@@ -56,6 +63,10 @@ export type EventPayloads = {
     command: string; cwd: string; decision: 'approved' | 'rejected' | 'expired' | 'cancelled' };
   'file.edit.started': ApprovalIdentity;
   'file.edit.completed': ApprovalIdentity & { status: EditOutcomeStatus };
+  'change-set.approval.requested': ChangeSetEventPayload;
+  'change-set.approval.decided': ChangeSetEventPayload;
+  'change-set.applying': ChangeSetEventPayload;
+  'change-set.completed': ChangeSetEventPayload;
   'run.completed': { runId: string; messageId: string; usage?: RunUsage;
     stopReason?: 'stop' | 'length'; durationMs?: number; modelRequestCount?: number; toolCallCount?: number } & RunMetadata;
   'run.failed': { runId: string; code: string; message: string };
@@ -98,13 +109,18 @@ export interface ProviderReply extends RunMetadata {
   toolCallCount?: number;
 }
 
+export type AgentApprovalEvent = ChangeSetEvent | 'command.approval.requested' | 'command.approval.decided';
+export type AgentApprovalPublisher = (type: AgentApprovalEvent,
+  payload: EventPayloads[AgentApprovalEvent]) => Promise<void>;
+
 export interface AgentProvider {
   streamReply(
     input: { text: string; runId?: string; history?: ContextTurn[]; workspace?: WorkspaceState;
+      taskId?: string; tasks?: TaskAccess; resumeContext?: string; changes?: ChangeSetAccess;
       knowledge?: import('./knowledge').KnowledgeAccess;
       skills?: SkillSelection;
       onTool?: (progress: ToolProgress) => Promise<void>;
-      onApproval?: (type: 'command.approval.requested' | 'command.approval.decided', payload: any) => Promise<void>;
+      onApproval?: AgentApprovalPublisher;
       onFileEdit?: (toolCallId: string, ...args: Parameters<FileEditHandler>) => ReturnType<FileEditHandler> },
     signal: AbortSignal,
     onDelta: (text: string) => Promise<void>,
@@ -117,7 +133,7 @@ export type SubmitMessageResult = void | {
   code: 'JOURNAL_WRITE_FAILED';
 };
 
-export interface AgentBridge {
+export interface AgentBridge extends TaskBridge, ChangeSetBridge, DesktopBridge {
   readConversation(conversationId: string): Promise<EventEnvelope[]>;
   submitMessage(request: SubmitMessageRequest): Promise<SubmitMessageResult>;
   readModelSettings(): Promise<PublicModelSettings>;
@@ -195,6 +211,10 @@ const payloadFields: Record<EventType, readonly string[]> = {
   'command.approval.decided': ['runId', 'toolCallId', 'approvalId', 'bindingDigest', 'command', 'cwd', 'decision'],
   'file.edit.started': ['runId', 'toolCallId', 'approvalId', 'bindingDigest', 'path', 'beforeSha256', 'afterSha256'],
   'file.edit.completed': ['runId', 'toolCallId', 'approvalId', 'bindingDigest', 'path', 'beforeSha256', 'afterSha256', 'status'],
+  'change-set.approval.requested': ['runId', 'taskId', 'toolCallId', 'id', 'approvalId', 'bindingDigest', 'expiresAt', 'status'],
+  'change-set.approval.decided': ['runId', 'taskId', 'toolCallId', 'id', 'approvalId', 'bindingDigest', 'expiresAt', 'status', 'decision'],
+  'change-set.applying': ['runId', 'taskId', 'toolCallId', 'id', 'approvalId', 'bindingDigest', 'expiresAt', 'status'],
+  'change-set.completed': ['runId', 'taskId', 'toolCallId', 'id', 'approvalId', 'bindingDigest', 'expiresAt', 'status'],
   'run.completed': ['runId', 'messageId'],
   'run.failed': ['runId', 'code', 'message'],
 };
@@ -235,12 +255,29 @@ export function validateEventEnvelope(input: unknown): ValidationResult {
   if (input.type === 'message.user.created') {
     return validatePrompt(input.payload.text);
   }
+  if ((input.type as string).startsWith('change-set.')) {
+    const payload = input.payload;
+    if (['runId', 'taskId', 'id', 'approvalId'].some((key) => typeof payload[key] !== 'string'
+      || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(payload[key] as string))
+      || typeof payload.toolCallId !== 'string' || payload.toolCallId.length > 256
+      || !/^[a-f0-9]{64}$/.test(payload.bindingDigest as string)
+      || !Number.isFinite(Date.parse(payload.expiresAt as string))
+      || !Number.isSafeInteger(payload.generation) || (payload.generation as number) < 0
+      || !['pending', 'applying', 'applied', 'partial', 'conflict', 'failed', 'unknown', 'rejected', 'expired', 'cancelled'].includes(payload.status as string)
+      || (input.type === 'change-set.approval.decided'
+        && !['approved', 'rejected', 'expired', 'cancelled'].includes(payload.decision as string))
+      || Object.keys(payload).some((key) => !['runId', 'taskId', 'toolCallId', 'id', 'approvalId',
+        'bindingDigest', 'expiresAt', 'status', 'generation', 'decision'].includes(key))) {
+      return { ok: false, error: 'Invalid change set event' };
+    }
+  }
   if (input.type === 'tool.started' || input.type === 'tool.completed') {
     const { toolCallId, toolName, summary, isError, durationMs, sources } = input.payload;
     if ((toolCallId as string).length > 256 || (summary as string).length > 800
       || !['list_files', 'read_file', 'search_text', 'replace_text', 'search_knowledge', 'read_project_knowledge',
         'run_powershell', 'web_search', 'web_fetch', 'browser_open', 'browser_read', 'browser_screenshot',
-        'browser_click', 'browser_type', 'unknown'].includes(toolName as string)) {
+        'browser_click', 'browser_type', 'update_task_plan', 'read_task_state', 'propose_change_set',
+        'run_verification', 'deliver_changes', 'unknown'].includes(toolName as string)) {
       return { ok: false, error: 'Invalid tool trace' };
     }
     if (input.type === 'tool.completed' && (typeof isError !== 'boolean'

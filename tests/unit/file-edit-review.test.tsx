@@ -56,7 +56,7 @@ describe('中文文件审批', () => {
   });
 
   it('算法放弃时显示前后全文，包括末尾而非截断', async () => {
-    vi.mocked(diffLines).mockImplementation((() => undefined) as typeof diffLines);
+    vi.mocked(diffLines).mockImplementation((() => undefined) as unknown as typeof diffLines);
     const initial = { ...proposal(), beforeText: `${'旧'.repeat(11_999)}甲`, afterText: `${'新'.repeat(11_999)}乙` };
     render(<FileEditReview {...fixture(initial).props} />);
     expect(await screen.findByLabelText('修改前全文')).toHaveTextContent(initial.beforeText);

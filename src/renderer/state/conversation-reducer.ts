@@ -105,6 +105,10 @@ export function conversationReducer(
     case 'command.approval.decided':
     case 'file.edit.started':
     case 'file.edit.completed':
+    case 'change-set.approval.requested':
+    case 'change-set.approval.decided':
+    case 'change-set.applying':
+    case 'change-set.completed':
       if (activeRunId !== event.payload.runId) return requireReload(state);
       break;
     case 'run.completed':
@@ -131,7 +135,7 @@ export function conversationReducer(
     case 'run.failed':
       if (activeRunId === event.payload.runId) {
         activeRunId = null;
-        error = event.payload.code === 'RUN_CANCELLED' ? null : runErrorText(event.payload.code);
+        error = ['RUN_CANCELLED', 'RUN_PAUSED'].includes(event.payload.code) ? null : runErrorText(event.payload.code);
         messages = messages.map((message) =>
           message.role === 'agent' && message.runId === event.payload.runId
             ? { ...message, status: event.payload.code === 'RUN_CANCELLED' ? 'cancelled' : 'failed' }

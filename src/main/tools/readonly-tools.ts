@@ -336,7 +336,7 @@ async function readTextFile(context: ExecutionContext, relative: string): Promis
   return readBoundedTextFile(context, relative);
 }
 
-async function* walkFiles(context: ExecutionContext, relative: string, maxTextFiles = LIMITS.textFiles): AsyncGenerator<CheckedPath> {
+async function* walkFiles(context: ExecutionContext, relative: string, maxTextFiles: number = LIMITS.textFiles): AsyncGenerator<CheckedPath> {
   context.signal?.throwIfAborted();
   const target = await checkedPath(context, relative);
   if (!target.stat.isDirectory()) throw new WorkspacePolicyError('文件列表和目录遍历要求普通目录。');
