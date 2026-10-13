@@ -13,6 +13,10 @@ import { rendererConfig } from './webpack.renderer.config';
 
 const config: ForgeConfig = {
   packagerConfig: {
+    name: 'Agent Workbench',
+    executableName: 'agent-workbench',
+    appBundleId: 'local.agent-workbench.desktop',
+    appCopyright: 'Copyright (c) 2026 Agent Workbench contributors',
     asar: true,
     extraResource: ['./LICENSE', './THIRD_PARTY_NOTICES.md'],
   },
