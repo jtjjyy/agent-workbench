@@ -9,3 +9,11 @@ test-results/
 playwright-report/
 .test-data/
 .superpowers/
+
+# 本地运行数据与个人交付产物
+/data-v1/
+/backups/
+/logs/
+*.awbackup.json
+/outputs/*resume*
+/outputs/*简历*
