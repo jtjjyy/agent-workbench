@@ -98,4 +98,3 @@ npm start
 - [记忆与知识库](docs/learning/stage5-memory-knowledge.md)、[Skills](docs/learning/stage9-skills.md)、[工具能力](docs/learning/stage10-tools.md)。
 - [本次发布记录](docs/publication.md)与 [历史阶段说明](docs/history/stage-notes.md)。
 
-早期 `outputs/stage1-evidence/` 仅证明当时的模拟版本，不代表新增模型、工具、修改和恢复能力已验证。简历与演示材料应以源码和实际证据说明个人贡献，不使用未经测量的性能、用户量或商业收益。
